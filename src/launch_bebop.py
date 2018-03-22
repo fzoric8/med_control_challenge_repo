@@ -7,7 +7,6 @@ from std_msgs.msg import *
 from mav_msgs.msg import Actuators
 
 
-
 class LaunchBebop():
 
     def __init__(self):
@@ -22,7 +21,7 @@ class LaunchBebop():
         self.bf = 8.548e-6      # kg m    --> Thrust constant of a motor
         self.bm = 0.016         # m       --> Moment constant of a motor
         self.l = 0.12905        # m       --> The distance of a motor from a center of mass
-
+        self.gravity = 9.81     # m/s^2   --> Gravity value
     def control_motor_speeds(self):
         """TO DO: controller for motor speeds based on some reference"""
 
@@ -45,13 +44,21 @@ class LaunchBebop():
 
         return drag_moment
 
+    def quadrotor_position_model(self, roll, pitch, yaw, angular_velocities):
+
+        thrust = sum(map(calculate_thrust, angular_velocities))
+        linear_vel_x = (thrust/self.mass) * (np.cos(roll) * np.sin(pitch) * np.cos(yaw) + np.sin(roll) * np.sin(yaw))
+        linear_vel_y = (thrust/self.mass) * (np.cos(roll) * np.sin(pitch) * np.sin(yaw) - np.sin(roll) * np.cos(yaw))
+        linear_vel_z = (thrust/self.mass) * (np.cos(roll) * np.sin(pitch)) - self.mass * self.gravity
+
+        return np.array([[linear_vel_x], [linear_vel_y], [linear_vel_z]])
+
     def publish_motor_speeds(self):
         """Create publisher and bebop launch node,
          send Actuators message to motor_speed command topic"""
 
         # init publisher
         pub = rospy.Publisher('/gazebo/command/motor_speed', Actuators, queue_size=10)
-        rospy.init_node('bebop_launch', anonymous=True)
 
         # check Rate for starters 20
         rate = rospy.Rate(20)
@@ -83,6 +90,7 @@ class LaunchBebop():
 
 
 if __name__=="__main__":
+    rospy.init_node('bebop_launch', anonymous=True)
     try:
         LB = LaunchBebop()
         LB.publish_motor_speeds()

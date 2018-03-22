@@ -1,4 +1,8 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
 import rospy
+import numpy as np
 from std_msgs.msg import *
 from mav_msgs.msg import Actuators
 
@@ -8,12 +12,38 @@ class LaunchBebop():
 
     def __init__(self):
         """Constructor initializes all needed variables"""
-        self.u1, self.u2, self.u3, self.u4 = 0, 0, 0, 0
+        self.omega1, self.omega2, self.omega3, self.omega4 = 0, 0, 0, 0
         self.angle1, self.angle2, self.angle3, self.angle4 = 0, 0, 0, 0
+        self.mass = 0.5         # kg --> mass of the quadcopter
+        self.Ixx = 0.00389      # kg m^2  --> Quadrotor moment of inertia in body x direction
+        self.Iyy = 0.00389      # kg m^2  --> Quadrotor moment of inertia in body y direction
+        self.Izz = 0.0078       # kg m^2  --> Quadrotor moment of inertia in body z direction
+        self.Tm = 0.0125        # s       --> Time constant of a motor
+        self.bf = 8.548e-6      # kg m    --> Thrust constant of a motor
+        self.bm = 0.016         # m       --> Moment constant of a motor
+        self.l = 0.12905        # m       --> The distance of a motor from a center of mass
 
     def control_motor_speeds(self):
         """TO DO: controller for motor speeds based on some reference"""
 
+    def calculate_thrust(self, angular_velocity):
+        """ Calculate thrust that motor with certain angular velocity produces
+            params :  angular_velocity - motor_speed in rad/s"""
+
+        thrust = self.bf * angular_velocity**2 * np.array([[0], [0], [1]])
+
+        return thrust
+
+    def calculate_drag_moments(self, angular_velocity, rotor_num):
+        """ Calculate drag moment that motor with cerrtain angular velocity produces
+            params : angular_velocity - motor_speed in rad/s
+                     rotor_num - needed for zeta (1 or -1) based on cw or ccw"""
+
+        zeta = 1 if rotor_num == (0 or 2) else -1
+
+        drag_moment = zeta * self.bf * self.bm * angular_velocity**2 * np.array([[0], [0], [1]])
+
+        return drag_moment
 
     def publish_motor_speeds(self):
         """Create publisher and bebop launch node,
@@ -27,8 +57,8 @@ class LaunchBebop():
         rate = rospy.Rate(20)
 
         # for starters init control vectors as zeros
-        control_vector = [self.u1, self.u2, self.u3, self.u4]
-        angle_control_vector = [self.angle1, self.angle2, self.1angle3, self.angle4]
+        control_vector = [self.omega1, self.omega2, self.omega3, self.omega4]
+        angle_control_vector = [self.angle1, self.angle2, self.angle3, self.angle4]
 
         while not rospy.is_shutdown():
 

@@ -7,14 +7,14 @@ import math
 from std_msgs.msg import *
 from mav_msgs.msg import Actuators
 from nav_msgs.msg import Odometry
-
+from pid import PID
 
 
 class LaunchBebop():
 
     def __init__(self):
         """Constructor initializes all needed variables"""
-        self.omega1, self.omega2, self.omega3, self.omega4 = 400, 400, 440, 440
+        self.omega1, self.omega2, self.omega3, self.omega4 = 0, 0, 0, 0
         self.angle1, self.angle2, self.angle3, self.angle4 = 0, 0, 0, 0
         self.mass = 0.5         # kg --> mass of the quadcopter
         self.Ixx = 0.00389      # kg m^2  --> Quadrotor moment of inertia in body x direction
@@ -28,6 +28,37 @@ class LaunchBebop():
         self.sleep_sec = 0.5    # sleep duration while not getting first measurement
         self.first_measurement = False
         self.odom_subscriber = rospy.Subscriber("bebop/odometry", Odometry, self.odometry_callback)
+
+        # define PID for height control
+        self.z_sp = 1           # z-position set point
+        self.z_ref_filt = 0     # z ref filtered
+        self.z_mv = 0           # z-position measured value
+        self.pid_z = PID()      # pid instance for z control
+
+        # define PID for height rate control
+        self.vz_sp = 0          # vz velocity set point
+        self.vz_mv = 0          # vz velocity measured value
+        self.pid_vz = PID()     # pid instance for z-velocity control
+
+        # Add parameters for z controller
+        self.pid_z.set_kp(10)
+        self.pid_z.set_ki(0.2)
+        self.pid_z.set_kd(0.2)
+
+        # Add parametersfor vz controller
+        self.pid_vz.set_kp(10)
+        self.pid_vz.set_ki(0.2)
+        self.pid_vz.set_kd(0.2)
+
+        # Set maximum ascend and descend vertical speed
+        self.pid_z.set_lim_high(5)
+        self.pid_z.set_lim_low(-5)
+
+        # Set maximum angular velocity for  motor
+        self.pid_vz.set_lim_high(1000)
+        self.pid_vz.set_lim_low(-1000)
+
+        self.t_old = 0
 
     def odometry_callback(self, data):
         """Callback function for odometry subscriber"""
@@ -77,8 +108,8 @@ class LaunchBebop():
         self.euler_rate_mv.z = sx / cy * q + cx / cy * r
 
 
-    def control_motor_speeds(self):
-        """TO DO: controller for motor speeds based on some reference"""
+    h_kd = PID().kp, PID().ki, PID().kd
+
 
     def calculate_thrust(self, angular_velocity):
         """ Calculate thrust that motor with certain angular velocity produces
@@ -109,9 +140,8 @@ class LaunchBebop():
 
         return np.array([[linear_acc_x], [linear_acc_y], [linear_acc_z]])
 
-    def publish_motor_speeds(self):
-        """Create publisher and bebop launch node,
-         send Actuators message to motor_speed command topic"""
+    def run(self):
+        """ Run ROS node - computes PID algorithms for z and vz control """
 
         # init publisher
         pub = rospy.Publisher('/gazebo/command/motor_speed', Actuators, queue_size=10)
@@ -124,9 +154,25 @@ class LaunchBebop():
         angle_control_vector = [self.angle1, self.angle2, self.angle3, self.angle4]
 
         while not self.first_measurement:
+            print("Waiting for first measurement.")
             rospy.sleep(self.sleep_sec)
+        print("Starting height control")
+
+        self.t_old = rospy.Time.now()
 
         while not rospy.is_shutdown():
+            rate.sleep()
+            t = rospy.Time.now()
+            dt = (t - self.t_old).to_sec()
+
+            self.t_old = t
+            self.mot_speed_hover = math.sqrt(4.905/self.bf/4)
+
+            # prefilter for reference
+            a = 0.1
+            self.z_ref_filt = (1 - a) * self.z_ref_filt + a * self.z_sp
+            vz_ref = self.pid_z.compute(self.z_ref_filt, self.z_mv, dt)
+            self.omega1 = self.mot_speed_hover + self.pid_vz.compute(vz_ref, self.vz_mv, dt)
 
             a = Actuators()
             # msg header initialization
@@ -139,22 +185,21 @@ class LaunchBebop():
             a.angles = angle_control_vector
 
             # angular velocity of certain rotor
+            control_vector = [0.91 * self.omega1, 0.91 * self.omega1, self.omega1, self.omega1]
             a.angular_velocities = control_vector
 
             # empty for starters
             a.normalized = []
             pub.publish(a)
             # print('Published')
-            print(dir(self.odom_subscriber))
-            print(self.p)
-            rate.sleep()
+            print(self.omega1)
 
 
 if __name__=="__main__":
     rospy.init_node('bebop_launch', anonymous=True)
     try:
         LB = LaunchBebop()
-        LB.publish_motor_speeds()
+        LB.run()
     except rospy.ROSInterruptException:
         pass
 

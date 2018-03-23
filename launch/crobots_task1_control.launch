@@ -8,7 +8,7 @@
 	<!-- Add position control -->
 	<node 
 		pkg="crobots_med_control" 
-		type="bebop_control.py" 
+		type="bebop_attitude_control.py"
 		name="bebop_control" 
 		output="screen">
 	</node>

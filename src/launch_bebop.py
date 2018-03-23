@@ -22,6 +22,7 @@ class LaunchBebop():
         self.bm = 0.016         # m       --> Moment constant of a motor
         self.l = 0.12905        # m       --> The distance of a motor from a center of mass
         self.gravity = 9.81     # m/s^2   --> Gravity value
+
     def control_motor_speeds(self):
         """TO DO: controller for motor speeds based on some reference"""
 
@@ -34,7 +35,7 @@ class LaunchBebop():
         return thrust
 
     def calculate_drag_moments(self, angular_velocity, rotor_num):
-        """ Calculate drag moment that motor with cerrtain angular velocity produces
+        """ Calculate drag moment that motor with certain angular velocity produces
             params : angular_velocity - motor_speed in rad/s
                      rotor_num - needed for zeta (1 or -1) based on cw or ccw"""
 
@@ -46,7 +47,7 @@ class LaunchBebop():
 
     def quadrotor_position_model(self, roll, pitch, yaw, angular_velocities):
 
-        thrust = sum(map(calculate_thrust, angular_velocities))
+        thrust = sum(map(self.calculate_thrust, angular_velocities))
         linear_vel_x = (thrust/self.mass) * (np.cos(roll) * np.sin(pitch) * np.cos(yaw) + np.sin(roll) * np.sin(yaw))
         linear_vel_y = (thrust/self.mass) * (np.cos(roll) * np.sin(pitch) * np.sin(yaw) - np.sin(roll) * np.cos(yaw))
         linear_vel_z = (thrust/self.mass) * (np.cos(roll) * np.sin(pitch)) - self.mass * self.gravity

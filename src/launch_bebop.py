@@ -5,6 +5,7 @@ import rospy
 import numpy as np
 import math
 from std_msgs.msg import *
+from geometry_msgs.msg import Vector3
 from mav_msgs.msg import Actuators
 from nav_msgs.msg import Odometry
 from pid import PID
@@ -29,8 +30,13 @@ class LaunchBebop():
         self.first_measurement = False
         self.odom_subscriber = rospy.Subscriber("bebop/odometry", Odometry, self.odometry_callback)
 
+        # define vector for measured and setopint values
+        self.euler_sp = Vector3(0., 0., 0.)
+        self.euler_mv = Vector3(0., 0., 0.)
+        self.euler_rate_mv = Vector3(0., 0., 0.)
+
         # define PID for height control
-        self.z_sp = 1           # z-position set point
+        self.z_sp = 0           # z-position set point
         self.z_ref_filt = 0     # z ref filtered
         self.z_mv = 0           # z-position measured value
         self.pid_z = PID()      # pid instance for z control
@@ -41,14 +47,14 @@ class LaunchBebop():
         self.pid_vz = PID()     # pid instance for z-velocity control
 
         # Add parameters for z controller
-        self.pid_z.set_kp(10)
-        self.pid_z.set_ki(0.2)
-        self.pid_z.set_kd(0.2)
+        self.pid_z.set_kp(5)
+        self.pid_z.set_ki(1)
+        self.pid_z.set_kd(2)
 
-        # Add parametersfor vz controller
-        self.pid_vz.set_kp(10)
-        self.pid_vz.set_ki(0.2)
-        self.pid_vz.set_kd(0.2)
+        # Add parameters for vz controller
+        self.pid_vz.set_kp(20)
+        self.pid_vz.set_ki(2)
+        self.pid_vz.set_kd(4)
 
         # Set maximum ascend and descend vertical speed
         self.pid_z.set_lim_high(5)
@@ -57,6 +63,52 @@ class LaunchBebop():
         # Set maximum angular velocity for  motor
         self.pid_vz.set_lim_high(1000)
         self.pid_vz.set_lim_low(-1000)
+
+        # Create pitch and roll PIDs
+
+        self.pitch_rate_PID = PID()
+        self.pitch_PID = PID()
+
+        self.pitch_rate_PID.set_kp(3.5)
+        self.pitch_rate_PID.set_ki(1)
+        self.pitch_rate_PID.set_kd(0.5)
+
+        self.pitch_rate_PID.set_lim_high(50)
+        self.pitch_rate_PID.set_lim_low(-50)
+
+        self.pitch_PID.set_kp(5)
+        self.pitch_PID.set_ki(0)
+        self.pitch_PID.set_kd(0.5)
+
+        self.pitch_PID.set_lim_high(30)
+        self.pitch_PID.set_lim_low(-30)
+
+        self.roll_rate_PID = PID()
+        self.roll_PID = PID()
+
+        self.roll_rate_PID.set_kp(3.5)
+        self.roll_rate_PID.set_ki(1)
+        self.roll_rate_PID.set_ki(0.5)
+
+        self.roll_rate_PID.set_lim_high(50)
+        self.roll_rate_PID.set_lim_low(-50)
+
+        self.roll_PID.set_kp(5)
+        self.roll_PID.set_ki(0)
+        self.roll_PID.set_kd(0.5)
+
+        self.roll_PID.set_lim_high(20)
+        self.roll_PID.set_lim_low(-20)
+
+        self.yaw_rate_PID = PID()
+        self.yaw_PID = PID()
+
+        self.yaw_rate_PID.set_kp(2)
+        #self.yaw_rate_PID.set_ki(0)
+        #self.yaw_rate_PID.set_kd(0)
+
+        self.yaw_rate_PID.set_lim_high(20)
+        self.yaw_rate_PID.set_lim_low(-20)
 
         self.t_old = 0
 
@@ -81,6 +133,7 @@ class LaunchBebop():
         self.qy = data.pose.pose.orientation.y
         self.qz = data.pose.pose.orientation.z
         self.qw = data.pose.pose.orientation.w
+
 
     def get_pitch_roll_yaw(self, qx, qy, qz, qw):
         """Calculate roll, pitch and yaw angles/rates with quaternions"""
@@ -108,7 +161,7 @@ class LaunchBebop():
         self.euler_rate_mv.z = sx / cy * q + cx / cy * r
 
 
-    h_kd = PID().kp, PID().ki, PID().kd
+    #h_kd = PID().kp, PID().ki, PID().kd
 
 
     def calculate_thrust(self, angular_velocity):
@@ -147,11 +200,7 @@ class LaunchBebop():
         pub = rospy.Publisher('/gazebo/command/motor_speed', Actuators, queue_size=10)
 
         # check Rate for starters 20
-        rate = rospy.Rate(20)
-
-        # for starters init control vectors as zeros
-        control_vector = [self.omega1, self.omega2, self.omega3, self.omega4]
-        angle_control_vector = [self.angle1, self.angle2, self.angle3, self.angle4]
+        rate = rospy.Rate(10)
 
         while not self.first_measurement:
             print("Waiting for first measurement.")
@@ -164,35 +213,56 @@ class LaunchBebop():
             rate.sleep()
             t = rospy.Time.now()
             dt = (t - self.t_old).to_sec()
+            print(dt)
 
             self.t_old = t
-            self.mot_speed_hover = math.sqrt(4.905/self.bf/4)
+            self.hover_speed = math.sqrt(4.905/self.bf/4)
+
+            self.get_pitch_roll_yaw(self.qx, self.qy, self.qz, self.qw)
 
             # prefilter for reference
             a = 0.1
             self.z_ref_filt = (1 - a) * self.z_ref_filt + a * self.z_sp
             vz_ref = self.pid_z.compute(self.z_ref_filt, self.z_mv, dt)
-            self.omega1 = self.mot_speed_hover + self.pid_vz.compute(vz_ref, self.vz_mv, dt)
+            domega_z = self.pid_vz.compute(vz_ref, self.vz_mv, dt)
+
+            # pitch control
+            error_prc = self.euler_sp.y - self.euler_mv.y
+            pitch_rate_ref = self.pitch_rate_PID.compute(self.euler_sp.y, self.euler_mv.y, dt)
+            print(self.euler_sp.y,  self.euler_mv.y)
+            print(pitch_rate_ref)
+            dwx = self.pitch_PID.compute(pitch_rate_ref,  self.euler_rate_mv.y, dt)
+
+            # roll control
+            error_rrc = self.euler_sp.x - self.euler_mv.x
+            roll_rate_ref = self.roll_rate_PID.compute(self.euler_sp.x, self.euler_mv.x, dt)
+            dwy = self.roll_PID.compute(roll_rate_ref, self.euler_rate_mv.x, dt)
+
+            # yaw control
+            error_yrc = self.euler_sp.z - self.euler_mv.z
+            dwz = self.yaw_rate_PID.compute(self.euler_sp.z,  self.euler_mv.z, dt)
+            print(dwz)
 
             a = Actuators()
-            # msg header initialization
-            header = std_msgs.msg.Header()
-            header.stamp = rospy.Time.now()
-            header.frame_id="base_link"
-            a.header = header
-
-            # angle of the actuator in [rad/s]
-            a.angles = angle_control_vector
 
             # angular velocity of certain rotor
-            control_vector = [0.91 * self.omega1, 0.91 * self.omega1, self.omega1, self.omega1]
-            a.angular_velocities = control_vector
+            motor_speed1 = self.hover_speed + domega_z - dwy/2 - dwx/2 #+ dwz/2
+            motor_speed2 = self.hover_speed + domega_z + dwy/2 - dwx/2 #- dwz/2
+            motor_speed3 = self.hover_speed + domega_z + dwy/2 + dwx/2 #+ dwz/2
+            motor_speed4 = self.hover_speed + domega_z - dwy/2 + dwx/2 #- dwz/2
+            a.angular_velocities = [0.908 * motor_speed1, 0.908 * motor_speed2,
+                                    motor_speed3, motor_speed4]
+
+            print("Error outputs are: {}, {}, {}".format(error_rrc, error_prc, error_yrc))
+            print("Motor speeds are {}".format(a.angular_velocities))
+            print("Current quadcopter height is: {}".format(self.z_mv))
+            print("Hover speed is: {}\nPitch PID output is:{}\nRoll PID output is:{}\n".format(self.hover_speed,
+                                                                                               dwx, dwy))
 
             # empty for starters
-            a.normalized = []
             pub.publish(a)
             # print('Published')
-            print(self.omega1)
+            self.z_sp = 3
 
 
 if __name__=="__main__":

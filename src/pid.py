@@ -8,7 +8,7 @@ class PID:
         This class implements a simple PID control algorithm.
     """
 
-    def __init__(self):
+    def __init__(self, P=0, I=0 , D=0, lim_h=float("inf"), lim_l=float("inf")):
         """
             Initializes PID gains (proportional - kp, integral - ki, derivative - kd) and control values to zero.
         """
@@ -24,8 +24,8 @@ class PID:
         self.ui_old = 0                 # I part from previous step
         self.ud = 0                     # D part
         self.u = 0                      # total control value
-        self.lim_high = float("inf")      # control value upper limit
-        self.lim_low = -float("inf")    # control value lower limit
+        self.lim_high = lim_h           # control value upper limit
+        self.lim_low = lim_l            # control value lower limit
 
         # init referent control value (set-value)
         self.ref = 0
@@ -46,6 +46,11 @@ class PID:
 
         # ros message formed when create_msg method is called
         self.pid_msg = PIDController()
+
+        self.set_kp(P)
+        self.set_ki(I)
+        self.set_kd(D)
+
 
     def reset(self):
         ''' Resets pid algorithm by setting all P,I,D parts to zero'''
@@ -111,7 +116,7 @@ class PID:
         if self.firstPass:
             # This is the first step of the algorithm
             # Init time stamp and error
-            #self.t_old = rospy.Time.now()
+            self.t_old = rospy.Time.now()
             self.error_old = ref - meas
             self.firstPass = False
             return self.u           # initialized to zero
@@ -125,8 +130,8 @@ class PID:
             # compute derivative part (self.ud),
             # compute total control value (self.u),
             # implement saturation function and antiwind-up,
-            #t = rospy.Time.now()
-            #self.dt = (t - self.t_old).to_sec()
+            t = rospy.Time.now()
+            self.dt = (t - self.t_old).to_sec()
             self.ref = ref
             self.meas = meas
             error = ref - meas
@@ -151,7 +156,7 @@ class PID:
                 self.ui = self.ui_old  # antiwind up
 
             self.ui_old = self.ui                           # save ui for next step
-            #self.t_old = t                                  # save t for next step
+            self.t_old = t                                  # save t for next step
             self.error_old = error
 
             # End of added code

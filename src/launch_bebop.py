@@ -44,8 +44,7 @@ class LaunchBebop:
         self.z_ref_filt = 0     # z ref filtered
         self.y_ref_filt = 0
         self.x_ref_filt = 0
-        self.z_mv = 0           # z-position measured value
-        self.pid_z = PID()      # pid instance for z control
+        self.z_mv = 0
 
         # Crontroller rate
         self.controller_rate = 50
@@ -53,92 +52,23 @@ class LaunchBebop:
         # define PID for height rate control
         self.vz_sp = 0          # vz velocity set point
         self.vz_mv = 0          # vz velocity measured value
-        self.pid_vz = PID()     # pid instance for z-velocity control
+
+        # Height controller
+        self.pid_z = PID(2, 0.5, 0, 10, -10)
+        self.pid_vz = PID(195.8, 0, 1.958, 1000, -1000)
 
         # Position loop
-        self.pid_x = PID()
-        self.pid_y = PID()
+        self.pid_x = PID(1, 0.05, 0.5, 0.2, -0.2)
+        self.pid_y = PID(1, 0.05, 0.5, 0.2, -0.2)
 
         # outer_loops
-        self.pitch_PID = PID()
-        self.roll_PID = PID()
-        self.yaw_PID = PID()
+        self.pitch_PID = PID(4.44309, 0.1, 0.2, 100, -100)
+        self.roll_PID = PID(4.44309, 0.1, 0.2, 100, -100)
+        self.yaw_PID = PID(4, 0.5, 0.5, 20, -20)
 
         # inner_loops
-        self.pitch_rate_PID = PID()
-        self.roll_rate_PID = PID()
-        self.yaw_rate_PID = PID()
-
-        self.set_PIDs()
-
-    def set_PIDs(self):
-        """ Set gains for all PID controllers
-
-        :return:
-        """
-
-        # X position control
-        self.pid_x.set_kp(1)
-        self.pid_x.set_ki(0.05)
-        self.pid_x.set_kd(0.5)
-        self.pid_x.set_lim_high(0.2)
-        self.pid_x.set_lim_low(-0.2)
-
-        # Y position control
-        self.pid_y.set_kp(1)
-        self.pid_y.set_ki(0.05)
-        self.pid_y.set_kd(0.5)
-        self.pid_y.set_lim_high(0.2)
-        self.pid_y.set_lim_low(-0.2)
-
-        # Z position control
-        self.pid_z.set_kp(2)
-        self.pid_z.set_ki(0.5)
-        self.pid_z.set_kd(0)
-        self.pid_z.set_lim_high(10)
-        self.pid_z.set_lim_low(-10)
-
-        # Z rate control
-        self.pid_vz.set_kp(195.8)
-        self.pid_vz.set_ki(0)
-        self.pid_vz.set_kd(1.958)
-        self.pid_vz.set_lim_high(1000)
-        self.pid_vz.set_lim_low(-1000)
-
-        # Pitch control
-        self.pitch_PID.set_kp(4.44309)
-        self.pitch_PID.set_ki(0.1)
-        self.pitch_PID.set_kd(0.2)
-        self.pitch_PID.set_lim_high(100)
-        self.pitch_PID.set_lim_low(-100)
-
-        # Pitch rate control
-        self.pitch_rate_PID.set_kp(16.61)
-        self.pitch_rate_PID.set_ki(0)
-        self.pitch_rate_PID.set_kd(0)
-        self.pitch_rate_PID.set_lim_high(200)
-        self.pitch_rate_PID.set_lim_low(-200)
-
-        # Roll control
-        self.roll_PID.set_kp(4.44309)
-        self.roll_PID.set_ki(0.1)
-        self.roll_PID.set_ki(0.2)
-        self.roll_PID.set_lim_high(100)
-        self.roll_PID.set_lim_low(-100)
-
-        # Roll rate control
-        self.roll_rate_PID.set_kp(16.61)
-        self.roll_rate_PID.set_ki(0)
-        self.roll_rate_PID.set_kd(0)
-        self.roll_rate_PID.set_lim_high(100)
-        self.roll_rate_PID.set_lim_low(-100)
-
-        # Yaw rate control
-        self.yaw_PID.set_kp(4)
-        self.yaw_PID.set_ki(0.5)
-        self.yaw_PID.set_kd(0.5)
-        self.yaw_PID.set_lim_high(20)
-        self.yaw_PID.set_lim_low(-20)
+        self.pitch_rate_PID = PID(16.61, 0, 0, 100, -100)
+        self.roll_rate_PID = PID(16.61, 0, 0, 100, -100)
 
     def setpoint_cb(self, data):
 

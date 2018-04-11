@@ -27,12 +27,23 @@ class LaunchBebop:
         self.hover_speed = math.sqrt(4.905 / self.bf / 4)
 
         self.first_measurement = False
-        self.odom_subscriber = rospy.Subscriber("bebop/odometry", Odometry, self.odometry_callback)
-        self.pose_subscriber = rospy.Subscriber("bebop/pos_ref", Vector3, self.setpoint_cb)
+        self.odom_subscriber = rospy.Subscriber("bebop/odometry",
+                                                Odometry,
+                                                self.odometry_callback)
+        self.pose_subscriber = rospy.Subscriber("bebop/pos_ref",
+                                                Vector3,
+                                                self.setpoint_cb)
+        self.odom_gt_subscriber = rospy.Subscriber("bebop/odometry_gt",
+                                                   Odometry,
+                                                   self.odometry_gt_callback)
 
         # initialize publishers
-        self.motor_pub = rospy.Publisher('/gazebo/command/motor_speed', Actuators, queue_size=10)
-        self.error_pub = rospy.Publisher('/bebop/pos_error', Float64, queue_size=10)
+        self.motor_pub = rospy.Publisher('/gazebo/command/motor_speed',
+                                         Actuators,
+                                         queue_size=10)
+        self.error_pub = rospy.Publisher('/bebop/pos_error',
+                                         Float64,
+                                         queue_size=10)
         self.actuator_msg = Actuators()
 
         # define vector for measured and setopint values
@@ -60,12 +71,12 @@ class LaunchBebop:
         self.pid_vz = PID(195.8, 0, 1.958, 300, -300)
 
         # Position loop
-        self.pid_x = PID(1, 0.05, 0.5, 0.25, -0.25)
-        self.pid_y = PID(1, 0.05, 0.5, 0.25, -0.25)
+        self.pid_x = PID(1, 0.03, 0.5, 0.2, -0.2)
+        self.pid_y = PID(1, 0.03, 0.5, 0.2, -0.2)
 
         # outer_loops
-        self.pitch_PID = PID(4.44309, 0.1, 0.2, 50, -50)
-        self.roll_PID = PID(4.44309, 0.1, 0.2, 50, -50)
+        self.pitch_PID = PID(4.44309, 0.1, 0.2, 100, -100)
+        self.roll_PID = PID(4.44309, 0.1, 0.2, 100, -100)
         self.yaw_PID = PID(4, 0.5, 0.5, 20, -20)
 
         # inner_loops
@@ -99,6 +110,11 @@ class LaunchBebop:
         self.qy = data.pose.pose.orientation.y
         self.qz = data.pose.pose.orientation.z
         self.qw = data.pose.pose.orientation.w
+
+    def odometry_gt_callback(self, data):
+        self.x_gt_mv = data.pose.pose.position.x
+        self.y_gt_mv = data.pose.pose.position.y
+        self.z_gt_mv = data.pose.pose.position.z
 
     def get_pitch_roll_yaw(self, qx, qy, qz, qw):
         """Calculate roll, pitch and yaw angles/rates with quaternions"""
@@ -184,9 +200,9 @@ class LaunchBebop:
             u_yaw = self.yaw_PID.compute(self.euler_sp.z, self.euler_mv.z, dt)
 
             # Calculate position error
-            error = math.sqrt((self.pose_sp.x - self.x_mv)**2 +
-                              (self.pose_sp.y - self.y_mv)**2 +
-                              (self.pose_sp.z - self.z_mv)**2)
+            error = math.sqrt((self.pose_sp.x - self.x_gt_mv)**2 +
+                              (self.pose_sp.y - self.y_gt_mv)**2 +
+                              (self.pose_sp.z - self.z_gt_mv)**2)
             self.error_pub.publish(error)
 
             # angular velocity of certain rotor

@@ -14,6 +14,7 @@ class LaunchBebop:
 
     def __init__(self):
         """Constructor initializes all needed variables"""
+
         self.mass = 0.5         # kg --> mass of the quadcopter
         self.Ixx = 0.00389      # kg m^2  --> Quadrotor moment of inertia in body x direction
         self.Iyy = 0.00389      # kg m^2  --> Quadrotor moment of inertia in body y direction

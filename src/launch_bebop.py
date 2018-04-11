@@ -78,18 +78,18 @@ class LaunchBebop:
         """
 
         # X position control
-        self.pid_x.set_kp(4)
-        self.pid_x.set_ki(0.2)
-        self.pid_x.set_kd(2)
-        self.pid_x.set_lim_high(0.05)
-        self.pid_x.set_lim_low(-0.05)
+        self.pid_x.set_kp(1)
+        self.pid_x.set_ki(0)
+        self.pid_x.set_kd(0.5)
+        self.pid_x.set_lim_high(0.125)
+        self.pid_x.set_lim_low(-0.125)
 
         # Y position control
-        self.pid_y.set_kp(4)
-        self.pid_y.set_ki(0.2)
-        self.pid_y.set_kd(2)
-        self.pid_y.set_lim_high(0.05)
-        self.pid_y.set_lim_low(-0.05)
+        self.pid_y.set_kp(1)
+        self.pid_y.set_ki(0)
+        self.pid_y.set_kd(0.5)
+        self.pid_y.set_lim_high(0.125)
+        self.pid_y.set_lim_low(-0.125)
 
         # Z position control
         self.pid_z.set_kp(2)
@@ -271,7 +271,8 @@ class LaunchBebop:
             print("Hover speed is: {}\n"
                   "Pitch PID output is:{}\n"
                   "Roll PID output is:{}\n"
-                  "Yaw PID output is:{}\n".format(self.hover_speed, u_pitch, u_roll, u_yaw))
+                  "Yaw PID output is:{}\n"
+                  "pitch_sp: {}, roll_sp: {}\n".format(self.hover_speed, u_pitch, u_roll, u_yaw, pitch_sp, roll_sp))
 
             self.motor_pub.publish(self.actuator_msg)
 

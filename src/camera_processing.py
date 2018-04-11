@@ -1,11 +1,10 @@
-
 import rospy, roslib
 import sys, time
 import numpy as np
 import math
 import cv2
 from launch_bebop import LaunchBebop
-from sensor_msgs.msg import CompressedImage
+from sensor_msgs.msg import CompressedImage, LaserScan
 
 VERBOSE = True
 
@@ -20,10 +19,14 @@ class CameraProcessing:
         #subscribed Topic
         self.subscriber = rospy.Subscriber("/bebop/camera1/image_raw/compressed",
                                            CompressedImage, self.image_cb)
+        self.laser_subscriber = rospy.Subscriber("/laser/scan", LaserScan, self.laser_cb)
         if VERBOSE:
             print("Subscribed to /bebop/camera1/image_raw/compressed")
 
         RATE = 50
+
+    def laser_cb(self, laser_msg):
+        self.range = laser_msg.ranges[0]
 
     def image_cb(self, ros_data):
         """ Callback function of subscribed topic 
@@ -42,14 +45,14 @@ class CameraProcessing:
         image_np = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
         cv2.imshow('cv_img', image_np)
-        cv2.waitKey(1)
+        #cv2.waitKey(1)
 
-        #msg = CompressedImage()
-        #msg.header.stamp = rospy.Time.now()
-        #msg.format = "jpeg"
-        #msg.data = np.array(cv2.imencode('.jpg', image_np)[1]).tostring()
+        msg = CompressedImage()
+        msg.header.stamp = rospy.Time.now()
+        msg.format = "jpeg"
+        msg.data = np.array(cv2.imencode('.jpg', image_np)[1]).tostring()
         # Publish new image
-        #self.image_pub.publish(msg)
+        self.image_pub.publish(msg)
 
     def run(self):
         rospy.Rate(20)
@@ -58,6 +61,7 @@ class CameraProcessing:
             rospy.sleep(2)
 
         rospy.spin()
+        print(self.range)
 
 if __name__=='__main__':
     rospy.init_node('camera_launch', anonymous=True)
@@ -67,6 +71,5 @@ if __name__=='__main__':
     except rospy.ROSInterruptException:
         #cv2.destroyAllWindows()
         pass
-
 
 

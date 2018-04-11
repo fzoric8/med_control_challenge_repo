@@ -27,6 +27,7 @@ class LaunchBebop:
         self.hover_speed = math.sqrt(4.905 / self.bf / 4)
 
         self.first_measurement = False
+
         self.odom_subscriber = rospy.Subscriber("bebop/odometry",
                                                 Odometry,
                                                 self.odometry_callback)
@@ -44,6 +45,14 @@ class LaunchBebop:
         self.error_pub = rospy.Publisher('/bebop/pos_error',
                                          Float64,
                                          queue_size=10)
+
+        self.odom_subscriber = rospy.Subscriber("bebop/odometry", Odometry, self.odometry_callback)
+        self.pose_subscriber = rospy.Subscriber("bebop/pos_ref", Vector3, self.setpoint_cb)
+        self.pose_subscriber = rospy.Subscriber("bebop/angle_ref", Vector3, self.angle_cb)
+
+        # initialize publisher
+        self.motor_pub = rospy.Publisher('/gazebo/command/motor_speed', Actuators, queue_size=10)
+
         self.actuator_msg = Actuators()
 
         # define vector for measured and setopint values
@@ -77,7 +86,7 @@ class LaunchBebop:
         # outer_loops
         self.pitch_PID = PID(4.44309, 0.1, 0.2, 100, -100)
         self.roll_PID = PID(4.44309, 0.1, 0.2, 100, -100)
-        self.yaw_PID = PID(4, 0.5, 0.5, 20, -20)
+        self.yaw_PID = PID(10, 0.004, 0.2, 150, -150)
 
         # inner_loops
         self.pitch_rate_PID = PID(16.61, 0, 0, 100, -100)
@@ -88,6 +97,10 @@ class LaunchBebop:
         self.pose_sp.x = data.x
         self.pose_sp.y = data.y
         self.pose_sp.z = data.z
+
+    def angle_cb(self, data):
+
+        self.euler_sp = Vector3(data.x, data.y, data.z)
 
     def odometry_callback(self, data):
         """Callback function for odometry subscriber"""
@@ -175,28 +188,42 @@ class LaunchBebop:
             vz_sp = self.pid_z.compute(self.z_ref_filt, self.z_mv, dt)
             u_height = self.pid_vz.compute(vz_sp, self.vz_mv, dt)
 
-            # PITCH CONTROL
+            # PITCH CONTROL OUTER LOOP
             # error_prc = self.euler_sp.y - self.euler_mv.y
             # x - position control
             filt_const_pitch = 0.5
             self.x_ref_filt = (1 - filt_const_pitch) * self.x_ref_filt \
                               + filt_const_pitch * self.pose_sp.x
             pitch_sp = self.pid_x.compute(self.pose_sp.x, self.x_mv, dt)
-            pitch_rate_sp = self.pitch_PID.compute(pitch_sp, self.euler_mv.y, dt)
-            u_pitch = self.pitch_rate_PID.compute(pitch_rate_sp,  self.euler_rate_mv.y, dt)
 
-            # ROLL CONTROL
+            # ROLL CONTROL OUTER LOOP
             # error_rrc = self.euler_sp.x - self.euler_mv.x
             # y position control
             filt_const_roll = 0.5
             self.y_ref_filt = (1 - filt_const_roll) * self.y_ref_filt \
                               + filt_const_roll * self.pose_sp.y
             roll_sp = -self.pid_y.compute(self.pose_sp.y, self.y_mv, dt)
+
+            # PITCH AND ROLL YAW ADJUSTMENT
+            roll_sp = math.cos(self.euler_mv.z) * roll_sp + math.sin(self.euler_mv.z) * pitch_sp
+            pitch_sp = math.cos(self.euler_mv.z) * pitch_sp + math.sin(self.euler_mv.z) * roll_sp
+
+            # PITCH CONTROL INNER LOOP
+            pitch_rate_sp = self.pitch_PID.compute(pitch_sp, self.euler_mv.y, dt)
+            u_pitch = self.pitch_rate_PID.compute(pitch_rate_sp,  self.euler_rate_mv.y, dt)
+
+            # ROLL CONTROL INNER LOOP
             roll_rate_sp = self.roll_PID.compute(roll_sp, self.euler_mv.x, dt)
             u_roll = self.roll_rate_PID.compute(roll_rate_sp, self.euler_rate_mv.x, dt)
 
             # YAW CONTROL
+
             # error_yrc = self.euler_sp.z - self.euler_mv.z
+
+            error_yrc = self.euler_sp.z - self.euler_mv.z
+            if math.fabs(error_yrc) > math.pi:
+                self.euler_sp.z = (self.euler_mv.z/math.fabs(self.euler_mv.z))*(2*math.pi - math.fabs(self.euler_sp.z))
+
             u_yaw = self.yaw_PID.compute(self.euler_sp.z, self.euler_mv.z, dt)
 
             # Calculate position error

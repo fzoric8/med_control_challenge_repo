@@ -48,7 +48,7 @@ class LaunchBebop:
         self.pid_z = PID()      # pid instance for z control
 
         # Crontroller rate
-        self.controller_rate = 10
+        self.controller_rate = 50
 
         # define PID for height rate control
         self.vz_sp = 0          # vz velocity set point
@@ -79,17 +79,17 @@ class LaunchBebop:
 
         # X position control
         self.pid_x.set_kp(1)
-        self.pid_x.set_ki(0)
+        self.pid_x.set_ki(0.05)
         self.pid_x.set_kd(0.5)
-        self.pid_x.set_lim_high(0.125)
-        self.pid_x.set_lim_low(-0.125)
+        self.pid_x.set_lim_high(0.2)
+        self.pid_x.set_lim_low(-0.2)
 
         # Y position control
         self.pid_y.set_kp(1)
-        self.pid_y.set_ki(0)
+        self.pid_y.set_ki(0.05)
         self.pid_y.set_kd(0.5)
-        self.pid_y.set_lim_high(0.125)
-        self.pid_y.set_lim_low(-0.125)
+        self.pid_y.set_lim_high(0.2)
+        self.pid_y.set_lim_low(-0.2)
 
         # Z position control
         self.pid_z.set_kp(2)
@@ -230,7 +230,7 @@ class LaunchBebop:
             # PITCH CONTROL
             # error_prc = self.euler_sp.y - self.euler_mv.y
             # x - position control
-            filt_const_pitch = 0.3
+            filt_const_pitch = 0.5
             self.x_ref_filt = (1 - filt_const_pitch) * self.x_ref_filt \
                               + filt_const_pitch * self.pose_sp.x
             pitch_sp = self.pid_x.compute(self.pose_sp.x, self.x_mv, dt)
@@ -240,7 +240,7 @@ class LaunchBebop:
             # ROLL CONTROL
             # error_rrc = self.euler_sp.x - self.euler_mv.x
             # y position control
-            filt_const_roll = 0.3
+            filt_const_roll = 0.5
             self.y_ref_filt = (1 - filt_const_roll) * self.y_ref_filt \
                               + filt_const_roll * self.pose_sp.y
             roll_sp = -self.pid_y.compute(self.pose_sp.y, self.y_mv, dt)

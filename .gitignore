@@ -1,2 +1,3 @@
 .project_with_env
 .idea
+/src/*.pyc

@@ -6,6 +6,7 @@ import math
 from geometry_msgs.msg import Vector3
 from mav_msgs.msg import Actuators
 from nav_msgs.msg import Odometry
+from std_msgs.msg import Float64
 from pid import PID
 
 
@@ -29,8 +30,9 @@ class LaunchBebop:
         self.odom_subscriber = rospy.Subscriber("bebop/odometry", Odometry, self.odometry_callback)
         self.pose_subscriber = rospy.Subscriber("bebop/pos_ref", Vector3, self.setpoint_cb)
 
-        # initialize publisher
+        # initialize publishers
         self.motor_pub = rospy.Publisher('/gazebo/command/motor_speed', Actuators, queue_size=10)
+        self.error_pub = rospy.Publisher('/bebop/pos_error', Float64, queue_size=10)
         self.actuator_msg = Actuators()
 
         # define vector for measured and setopint values
@@ -54,16 +56,16 @@ class LaunchBebop:
         self.vz_mv = 0          # vz velocity measured value
 
         # Height controller
-        self.pid_z = PID(2, 0.5, 0, 10, -10)
-        self.pid_vz = PID(195.8, 0, 1.958, 1000, -1000)
+        self.pid_z = PID(4, 0.05, 0.1, 10, -10)
+        self.pid_vz = PID(195.8, 0, 1.958, 300, -300)
 
         # Position loop
-        self.pid_x = PID(1, 0.05, 0.5, 0.2, -0.2)
-        self.pid_y = PID(1, 0.05, 0.5, 0.2, -0.2)
+        self.pid_x = PID(1, 0.05, 0.5, 0.25, -0.25)
+        self.pid_y = PID(1, 0.05, 0.5, 0.25, -0.25)
 
         # outer_loops
-        self.pitch_PID = PID(4.44309, 0.1, 0.2, 100, -100)
-        self.roll_PID = PID(4.44309, 0.1, 0.2, 100, -100)
+        self.pitch_PID = PID(4.44309, 0.1, 0.2, 50, -50)
+        self.roll_PID = PID(4.44309, 0.1, 0.2, 50, -50)
         self.yaw_PID = PID(4, 0.5, 0.5, 20, -20)
 
         # inner_loops
@@ -178,8 +180,14 @@ class LaunchBebop:
             u_roll = self.roll_rate_PID.compute(roll_rate_sp, self.euler_rate_mv.x, dt)
 
             # YAW CONTROL
-            error_yrc = self.euler_sp.z - self.euler_mv.z
+            # error_yrc = self.euler_sp.z - self.euler_mv.z
             u_yaw = self.yaw_PID.compute(self.euler_sp.z, self.euler_mv.z, dt)
+
+            # Calculate position error
+            error = math.sqrt((self.pose_sp.x - self.x_mv)**2 +
+                              (self.pose_sp.y - self.y_mv)**2 +
+                              (self.pose_sp.z - self.z_mv)**2)
+            self.error_pub.publish(error)
 
             # angular velocity of certain rotor
             motor_speed1 = self.hover_speed + u_height - u_roll - u_pitch - u_yaw
@@ -202,7 +210,9 @@ class LaunchBebop:
                   "Pitch PID output is:{}\n"
                   "Roll PID output is:{}\n"
                   "Yaw PID output is:{}\n"
-                  "pitch_sp: {}, roll_sp: {}\n".format(self.hover_speed, u_pitch, u_roll, u_yaw, pitch_sp, roll_sp))
+                  "pitch_sp: {}, roll_sp: {}\n"
+                  "Error: {}".format(
+                self.hover_speed, u_pitch, u_roll, u_yaw, pitch_sp, roll_sp, error))
 
             self.motor_pub.publish(self.actuator_msg)
 

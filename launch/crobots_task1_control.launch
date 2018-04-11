@@ -7,10 +7,12 @@
 
 	<!-- Add position control -->
 	<node 
-		pkg="crobots_med_control" 
+		pkg="crobots_med_control"
 		type="launch_bebop.py"
 		name="bebop_launch"
 		output="screen">
+
+		<param name="verbose" value="True" type="bool" />
 	</node>
 
 </launch>

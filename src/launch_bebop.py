@@ -28,31 +28,38 @@ class LaunchBebop:
         self.hover_speed = math.sqrt(4.905 / self.bf / 4)
 
         self.first_measurement = False
+        self.controller_info = False
 
-        self.odom_subscriber = rospy.Subscriber("bebop/odometry",
-                                                Odometry,
-                                                self.odometry_callback)
-        self.pose_subscriber = rospy.Subscriber("bebop/pos_ref",
-                                                Vector3,
-                                                self.setpoint_cb)
-        self.odom_gt_subscriber = rospy.Subscriber("bebop/odometry_gt",
-                                                   Odometry,
-                                                   self.odometry_gt_callback)
+        self.odom_subscriber = rospy.Subscriber(
+            "bebop/odometry",
+            Odometry,
+            self.odometry_callback)
+        self.pose_subscriber = rospy.Subscriber(
+            "bebop/pos_ref",
+            Vector3,
+            self.setpoint_cb)
+        self.odom_gt_subscriber = rospy.Subscriber(
+            "bebop/odometry_gt",
+            Odometry,
+            self.odometry_gt_callback)
+        self.angle_subscriber = rospy.Subscriber(
+            "bebop/angle_ref",
+            Vector3,
+            self.angle_cb)
 
         # initialize publishers
-        self.motor_pub = rospy.Publisher('/gazebo/command/motor_speed',
-                                         Actuators,
-                                         queue_size=10)
-        self.error_pub = rospy.Publisher('/bebop/pos_error',
-                                         Float64,
-                                         queue_size=10)
-
-        self.odom_subscriber = rospy.Subscriber("bebop/odometry", Odometry, self.odometry_callback)
-        self.pose_subscriber = rospy.Subscriber("bebop/pos_ref", Vector3, self.setpoint_cb)
-        self.pose_subscriber = rospy.Subscriber("bebop/angle_ref", Vector3, self.angle_cb)
-
-        # initialize publisher
-        self.motor_pub = rospy.Publisher('/gazebo/command/motor_speed', Actuators, queue_size=10)
+        self.motor_pub = rospy.Publisher(
+            '/gazebo/command/motor_speed',
+            Actuators,
+            queue_size=10)
+        self.error_pub = rospy.Publisher(
+            '/bebop/pos_error',
+            Float64,
+            queue_size=10)
+        self.motor_pub = rospy.Publisher(
+            '/gazebo/command/motor_speed',
+            Actuators,
+            queue_size=10)
 
         self.actuator_msg = Actuators()
 
@@ -64,13 +71,11 @@ class LaunchBebop:
         self.t_old = 0
 
         # define PID for height control
-        self.z_ref_filt = 0     # z ref filtered
-        self.y_ref_filt = 0
-        self.x_ref_filt = 0
         self.z_mv = 0
 
         # Crontroller rate
         self.controller_rate = 50
+        self.rate = rospy.Rate(self.controller_rate)
 
         # define PID for height rate control
         self.vz_sp = 0          # vz velocity set point
@@ -92,6 +97,20 @@ class LaunchBebop:
         # inner_loops
         self.pitch_rate_PID = PID(16.61, 0, 0, 100, -100)
         self.roll_rate_PID = PID(16.61, 0, 0, 100, -100)
+
+        # Pre-filter constants
+        self.filt_const_x = 0.5
+        self.filt_const_y = 0.5
+        self.filt_const_yaw = 0.5
+        self.filt_const_z = 0.1
+
+        # Post filter values
+        self.z_filt_sp = 0
+        self.y_filt_sp = 0
+        self.x_filt_sp = 0
+
+        # Define magic thrust number :-)
+        self.magic_number = 0.908
 
     def setpoint_cb(self, data):
 
@@ -130,7 +149,7 @@ class LaunchBebop:
         self.y_gt_mv = data.pose.pose.position.y
         self.z_gt_mv = data.pose.pose.position.z
 
-    def get_pitch_roll_yaw(self, qx, qy, qz, qw):
+    def convert_to_euler(self, qx, qy, qz, qw):
         """Calculate roll, pitch and yaw angles/rates with quaternions"""
 
         # conversion quaternion to euler (yaw - pitch - roll)
@@ -158,56 +177,45 @@ class LaunchBebop:
     def run(self):
         """ Run ROS node - computes PID algorithms for z and vz control """
 
-        # check Rate for starters 20
-        rate = rospy.Rate(self.controller_rate)
-
         while not self.first_measurement:
-            print("Waiting for first measurement.")
+            print("LaunchBebop.run() - Waiting for first measurement.")
             rospy.sleep(self.sleep_sec)
 
-        print("Starting height control")
-
+        print("LaunchBebop.run() - Starting position control")
         self.t_old = rospy.Time.now()
 
         while not rospy.is_shutdown():
-            rate.sleep()
+            self.rate.sleep()
 
             t = rospy.Time.now()
             dt = (t - self.t_old).to_sec()
-            print(dt)
             self.t_old = t
 
             if dt < 1.0/self.controller_rate:
                 continue
 
-            self.get_pitch_roll_yaw(self.qx, self.qy, self.qz, self.qw)
+            self.convert_to_euler(self.qx, self.qy, self.qz, self.qw)
 
             # HEIGHT CONTROL
-            filt_const_z = 0.1
-            self.z_ref_filt = (1 - filt_const_z) * self.z_ref_filt \
-                              + filt_const_z * self.pose_sp.z
-            vz_sp = self.pid_z.compute(self.z_ref_filt, self.z_mv, dt)
+            self.z_filt_sp = prefilter(self.pose_sp.z, self.z_filt_sp, self.filt_const_z)
+            vz_sp = self.pid_z.compute(self.z_filt_sp, self.z_mv, dt)
             u_height = self.pid_vz.compute(vz_sp, self.vz_mv, dt)
 
             # PITCH CONTROL OUTER LOOP
-            # error_prc = self.euler_sp.y - self.euler_mv.y
             # x - position control
-            filt_const_pitch = 0.5
-            self.x_ref_filt = (1 - filt_const_pitch) * self.x_ref_filt \
-                              + filt_const_pitch * self.pose_sp.x
+            self.x_filt_sp = prefilter(self.pose_sp.x, self.x_filt_sp, self.filt_const_x)
             pitch_sp = self.pid_x.compute(self.pose_sp.x, self.x_mv, dt)
 
             # ROLL CONTROL OUTER LOOP
-            # error_rrc = self.euler_sp.x - self.euler_mv.x
             # y position control
-            filt_const_roll = 0.5
-            self.y_ref_filt = (1 - filt_const_roll) * self.y_ref_filt \
-                              + filt_const_roll * self.pose_sp.y
-            roll_sp = -self.pid_y.compute(self.pose_sp.y, self.y_mv, dt)
+            self.y_filt_sp = prefilter(self.pose_sp.y, self.y_filt_sp, self.filt_const_y)
+            roll_sp = - self.pid_y.compute(self.pose_sp.y, self.y_mv, dt)
 
             # PITCH AND ROLL YAW ADJUSTMENT
-            roll_sp = math.cos(self.euler_mv.z) * roll_sp + math.sin(self.euler_mv.z) * pitch_sp
-            pitch_sp = math.cos(self.euler_mv.z) * pitch_sp + math.sin(self.euler_mv.z) * roll_sp
+            roll_sp = math.cos(self.euler_mv.z) * roll_sp + \
+                      math.sin(self.euler_mv.z) * pitch_sp
+            pitch_sp = math.cos(self.euler_mv.z) * pitch_sp + \
+                       math.sin(self.euler_mv.z) * roll_sp
 
             # PITCH CONTROL INNER LOOP
             pitch_rate_sp = self.pitch_PID.compute(pitch_sp, self.euler_mv.y, dt)
@@ -218,13 +226,10 @@ class LaunchBebop:
             u_roll = self.roll_rate_PID.compute(roll_rate_sp, self.euler_rate_mv.x, dt)
 
             # YAW CONTROL
-
-            # error_yrc = self.euler_sp.z - self.euler_mv.z
-
             error_yrc = self.euler_sp.z - self.euler_mv.z
             if math.fabs(error_yrc) > math.pi:
-                self.euler_sp.z = (self.euler_mv.z/math.fabs(self.euler_mv.z))*(2*math.pi - math.fabs(self.euler_sp.z))
-
+                self.euler_sp.z = (self.euler_mv.z/math.fabs(self.euler_mv.z))*\
+                                  (2*math.pi - math.fabs(self.euler_sp.z))
             u_yaw = self.yaw_PID.compute(self.euler_sp.z, self.euler_mv.z, dt)
 
             # Calculate position error
@@ -239,33 +244,51 @@ class LaunchBebop:
             motor_speed3 = self.hover_speed + u_height + u_roll + u_pitch - u_yaw
             motor_speed4 = self.hover_speed + u_height - u_roll + u_pitch + u_yaw
             self.actuator_msg.angular_velocities = \
-                [0.908*motor_speed1, 0.908*motor_speed2, motor_speed3, motor_speed4]
+                [self.magic_number * motor_speed1, self.magic_number * motor_speed2,
+                 motor_speed3, motor_speed4]
 
-            print("Comparison x:{}\nx_m:{}\ny:{}\ny_m:{}\nz:{}\nz_m{}".format(
-                self.pose_sp.x,
-                self.x_mv,
-                self.pose_sp.y,
-                self.y_mv,
-                self.pose_sp.z,
-                self.z_mv))
-            print("Motor speeds are {}".format(self.actuator_msg.angular_velocities))
-            print("Current quadcopter height is: {}".format(self.z_mv))
-            print("Hover speed is: {}\n"
-                  "Pitch PID output is:{}\n"
-                  "Roll PID output is:{}\n"
-                  "Yaw PID output is:{}\n"
-                  "pitch_sp: {}, roll_sp: {}\n"
-                  "Error: {}".format(
-                self.hover_speed, u_pitch, u_roll, u_yaw, pitch_sp, roll_sp, error))
+            # Print out controller information
+            if self.controller_info:
+                print(dt)
+                print("Comparison x:{}\nx_m:{}\ny:{}\ny_m:{}\nz:{}\nz_m{}".format(
+                    self.pose_sp.x,
+                    self.x_mv,
+                    self.pose_sp.y,
+                    self.y_mv,
+                    self.pose_sp.z,
+                    self.z_mv))
+                print("Motor speeds are {}".format(self.actuator_msg.angular_velocities))
+                print("Current quadcopter height is: {}".format(self.z_mv))
+                print("Hover speed is: {}\n"
+                      "Pitch PID output is:{}\n"
+                      "Roll PID output is:{}\n"
+                      "Yaw PID output is:{}\n"
+                      "pitch_sp: {}, roll_sp: {}\n"
+                      "Error: {}\n".format(
+                    self.hover_speed, u_pitch, u_roll, u_yaw, pitch_sp, roll_sp, error))
 
             self.motor_pub.publish(self.actuator_msg)
+
+
+def prefilter(x_k, x_k_1, a):
+    """
+    First order filter.
+    (1 - a) * xK-1 + a * xK
+
+    :param x_k: Current value
+    :param x_k_1: Previous value
+    :param a: Filter constant
+    :return:
+    """
+    return (1 - a) * x_k_1 + a * x_k
 
 
 if __name__ == "__main__":
     rospy.init_node('bebop_launch', anonymous=True)
     try:
-        LB = LaunchBebop()
-        LB.run()
+        launch_bebop = LaunchBebop()
+        launch_bebop.controller_info = rospy.get_param("~verbose", False)
+        launch_bebop.run()
     except rospy.ROSInterruptException:
         pass
 

@@ -13,14 +13,4 @@
 		output="screen">
 	</node>
 
-    <!-- Add position control -->
-	<node
-		pkg="crobots_med_control"
-		type="launch_bebop.py"
-		name="bebop_launch"
-		output="screen">
-
-		<param name="verbose" value="False" type="bool" />
-	</node>
-
 </launch>

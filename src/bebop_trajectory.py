@@ -3,7 +3,7 @@
 
 import rospy
 import math
-import scipy
+import scipy.linalg
 import numpy as np
 from geometry_msgs.msg import Vector3
 from mav_msgs.msg import Actuators
@@ -27,7 +27,7 @@ class BebopTrajectory:
         self.l = 0.12905  # m       --> The distance of a motor from a center of mass
         self.gravity = 9.81  # m/s^2   --> Gravity value
         self.sleep_sec = 0.5  # sleep duration while not getting first measurement
-        self.hover_speed = math.sqrt(4.905 / self.bf / 4)
+        self.hover_speed = 400
 
         self.arm = self.l * math.cos(math.pi / 4)
 
@@ -264,10 +264,7 @@ class BebopTrajectory:
         # compute the LQR gain
         K = np.matrix(scipy.linalg.inv(B.T * X * B + R) * (B.T * X * A))
 
-        # TODO: Remove eigenvalues/vector calculations (not needed?)
-        eigVals, eigVecs = scipy.linalg.eig(A - B * K)
-
-        return K, X, eigVals
+        return K
 
     def run(self):
         """
@@ -289,13 +286,7 @@ class BebopTrajectory:
             dt = (t - self.t_old).to_sec()
             self.t_old = t
 
-            # Check if trajectory is recieved
-            if not self.trajectory_received:
-                print("BebopTrajectory.run() - "
-                      "Waiting for trajectory on /bebop/trajectory_reference")
-                continue
-
-            # Don't evaluate sonner than controller rate specifies
+            # Don't evaluate sooner than controller rate specifies
             if dt < 0.99 / self.controller_rate:
                 continue
 
@@ -304,10 +295,14 @@ class BebopTrajectory:
                 self.euler_rate_mv.x, self.euler_rate_mv.y, self.euler_rate_mv.z = \
                 self.quaternion2euler(self.qx, self.qy, self.qz, self.qw)
 
+            # If trajectory isn't received, LQR is used for point following
+            if not self.trajectory_received:
+
+
             # Increase trajectory point index, check if finished
             self.trajectory_index += 1
-            print("BebopTrajectory.run() - point {} / {}"
-                  .format(self.trajectory_index, self.trajectory_point_count))
+            print("BebopTrajectory.run() - point {} / {}\ndt: {}"
+                  .format(self.trajectory_index, self.trajectory_point_count, dt))
             if self.trajectory_index >= self.trajectory_point_count:
                 print("BebopTrajectory.run() -"
                       "Trajectory completed.")
@@ -317,7 +312,7 @@ class BebopTrajectory:
             # Assume trajectory is valid beyond this point
             current_point = self.trajectory_points[self.trajectory_index]
             delta_u1, delta_u2, delta_u3, delta_u4 = \
-                trajectory_tracking(
+                self.trajectory_tracking(
                     current_point.transforms[0].translation,
                     current_point.transforms[0].rotation,
                     current_point.velocities[0].linear,
@@ -351,34 +346,50 @@ class BebopTrajectory:
             # Publish Actuator message
             self.motor_pub.publish(self.actuator_msg)
 
+    def trajectory_tracking(self, point, angle, lin_vel, ang_vel, lin_acc, ang_acc):
+        """
+        This function perfomrs trajectory tracking based on the current
+        quadrotor information and desired.
 
-def trajectory_tracking(point, angle, lin_vel, ang_vel, lin_acc, ang_acc):
-    """
-    This function perfomrs trajectory tracking based on the current
-    quadrotor information and desired.
+        :param point: Desired point transform.
+        :param angle: Desired angle.
+        :param lin_vel: Desired linear velocity.
+        :param ang_vel: Desired angular velocity.
+        :param lin_acc: Desired linear acceleration.
+        :param ang_acc: Desired angular acceleration.
 
-    :param point: Desired point transform.
-    :param angle: Desired angle.
-    :param lin_vel: Desired linear velocity.
-    :param ang_vel: Desired angular velocity.
-    :param lin_acc: Desired linear acceleration.
-    :param ang_acc: Desired angular acceleration.
+        :return:
+            Returns thrust delta required to reach given point.
+            As 4 values:
+                delta_u1, delta_u2, delta_u3, delta_u4.
+        """
+        delta_u = [0, 0, 0, 0]
+        euler_angle = Vector3(0., 0., 0.)
+        euler_rate = Vector3(0., 0., 0.)
 
-    :return:
-        Returns thrust delta required to reach given point.
-        As 4 values:
-            delta_u1, delta_u2, delta_u3, delta_u4.
-    """
-    delta_u = [0, 0, 0, 0]
+        euler_angle.x, euler_angle.y, euler_angle.z, euler_rate.x, euler_rate.y, euler_rate.z = \
+            self.quaternion2euler(angle.x, angle.y, angle.z, angle.w)
 
-    # TODO: Bouyou code below, beware!
-    # self.pose_sp = self.trajectory_points[self.trajectory_index].translation
-    # quart_sp = self.trajectory_points[self.i].transforms[0].rotation
-    # self.convert_to_euler(quart_sp.x, quart_sp.y, quart_sp.z, quart_sp.w)
+        delta_pose = Vector3(self.x_mv - point.x, self.y_mv - point.y, self.z_mv - point.z)
+        delta_angle = Vector3(self.euler_mv.x - euler_angle.x, self.euler_mv.y - euler_angle.y,
+                              self.euler_mv.z - euler_angle.z)
+        delta_lin_vel = Vector3(self.vx_mv - lin_vel.x, self.vy_mv - lin_vel.y, self.vz_mv - lin_vel.z)
+        delta_ang_vel = Vector3(self.p - ang_vel.x, self.q - ang_vel.y, self.r - ang_vel.z)
 
-    # TODO: Finish calculating LQR control
+        delta_state = np.matrix([delta_pose.x, delta_lin_vel.x, delta_pose.y, delta_lin_vel.y,
+                                 delta_pose.z, delta_lin_vel.z, delta_angle.x, delta_ang_vel.x,
+                                 delta_angle.y, delta_ang_vel.y, delta_angle.z, delta_ang_vel.z])
+        delta_state = delta_state.T
 
-    return delta_u[0], delta_u[1], delta_u[2], delta_u[3]
+        # TODO: Finish calculating LQR control
+        # LQR calculation in current state
+        Q = 10000 * np.identity(12)
+        R = np.identity(4)
+        K = self.dlqr(Q, R)
+
+        delta_u = np.dot(K, delta_state)
+        print("Delta u: {}\n", format(delta_u))
+        return delta_u[0], delta_u[1], delta_u[2], delta_u[3]
 
 
 if __name__ == '__main__':

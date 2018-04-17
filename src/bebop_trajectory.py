@@ -306,6 +306,8 @@ class BebopTrajectory:
 
             # Increase trajectory point index, check if finished
             self.trajectory_index += 1
+            print("BebopTrajectory.run() - point {} / {}"
+                  .format(self.trajectory_index, self.trajectory_point_count))
             if self.trajectory_index >= self.trajectory_point_count:
                 print("BebopTrajectory.run() -"
                       "Trajectory completed.")

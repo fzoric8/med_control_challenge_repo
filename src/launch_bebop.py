@@ -75,7 +75,7 @@ class LaunchBebop:
         self.z_mv = 0
 
         # Crontroller rate
-        self.controller_rate = 50
+        self.controller_rate = 100
         self.rate = rospy.Rate(self.controller_rate)
 
         # define PID for height rate control
@@ -87,6 +87,7 @@ class LaunchBebop:
         self.pid_vz = PID(195.8, 0, 1.958, 300, -300)
 
         # Position loop
+
         if self.wind_controller:
             # TODO: Tune parameters
             self.pid_x = PID(0.7, 0.0001, 0.1, 0.4, -0.4)

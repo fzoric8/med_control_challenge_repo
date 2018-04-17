@@ -380,6 +380,9 @@ def trajectory_tracking(point, angle, lin_vel, ang_vel, lin_acc, ang_acc):
 
     return delta_u[0], delta_u[1], delta_u[2], delta_u[3]
 
+    def  calculate_delta_eps(self):
+
+
 
 if __name__ == '__main__':
     rospy.init_node("bebop_trajectory")

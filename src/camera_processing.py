@@ -7,6 +7,7 @@ from launch_bebop import LaunchBebop
 from sensor_msgs.msg import CompressedImage, LaserScan
 
 VERBOSE = False
+SAVE_DIR = "/home/fzoric/Desktop/windmill_photos"
 
 
 class CameraProcessing:
@@ -53,17 +54,18 @@ class CameraProcessing:
 
 
     def draw_HoughImage(self, lines, img):
-        for rho,theta in lines[0]:
-            a = np.cos(theta)
-            b = np.sin(theta)
-            x0 = a*rho
-            y0 = b*rho
-            x1 = int(x0 + 2000*(-b))
-            y1 = int(y0 + 2000*(a))
-            x2 = int(x0 - 2000*(-b))
-            y2 = int(y0 - 2000*(a))
+        for element in range(8):
+            for rho, theta in lines[element]:
+                a = np.cos(theta)
+                b = np.sin(theta)
+                x0 = a*rho
+                y0 = b*rho
+                x1 = int(x0 + 2000*(-b))
+                y1 = int(y0 + 2000*(a))
+                x2 = int(x0 - 2000*(-b))
+                y2 = int(y0 - 2000*(a))
 
-            cv2.line(img, (x1, y1), (x2, y2), (0, 0, 255), 5)
+                cv2.line(img, (x1, y1), (x2, y2), (0, 0, 255), 5)
         return(img)
 
 
@@ -71,19 +73,24 @@ class CameraProcessing:
     def run(self):
 
 
+        counter = 0
         while not self.first_image_captured:
             rospy.sleep(2)
 
         while not rospy.is_shutdown():
+
             # little sleepy boy
             self.rate.sleep()
-            print(self.np_arr.shape)
-
+            #print(self.np_arr.shape)
+            counter += 1
             # image procssing
             image_np = cv2.imdecode(self.np_arr, cv2.COLOR_BGR2GRAY)
             edges = cv2.Canny(image_np, 130, 200, apertureSize=3)
-            lines = cv2.HoughLines(edges, 1, 1, 20)
+            lines = cv2.HoughLines(edges, 2, np.pi/180, 150)
+            print(lines.shape)
+            cv2.imwrite("{save_dir}/photo_{counter}.png".format(SAVE_DIR, counter), edges)
             img = self.draw_HoughImage(lines, image_np)
+            cv2.imwrite("{save_dir}/hough_{counter}.png".format(SAVE_DIR, counter), img)
 
             # Create published image
             msg = CompressedImage()

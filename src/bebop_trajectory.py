@@ -371,41 +371,11 @@ def trajectory_tracking(point, angle, lin_vel, ang_vel, lin_acc, ang_acc):
     """
     delta_u = [0, 0, 0, 0]
 
-    euler_angle.x, euler_angle.y, euler_angle.z, euler_rate.x, euler_rate.y, euler_rate.z = \
-        self.quaternion2euler(angle.x, angle.y, angle.z, angle.w)
-    delta_pose = Vector3(self.x_mv - point.x,
-                         self.y_mv - point.y,
-                         self.z_mv - point.z)
-    delta_angle = Vector3(self.euler_mv.x - euler_angle.x,
-                          self.euler_mv.y - euler_angle.y,
-                          self.euler_mv.z - euler_angle.z)
-    delta_lin_vel = Vector3(self.vx_mv - lin_vel.x,
-                            self.vy_mv - lin_vel.y,
-                            self.vz_mv - lin_vel.z)
-    delta_ang_vel = Vector3(self.p - ang_vel.x,
-                            self.q - ang_vel.y,
-                            self.r - ang_vel.z)
+    # TODO: Bouyou code below, beware!
+    # self.pose_sp = self.trajectory_points[self.trajectory_index].translation
+    # quart_sp = self.trajectory_points[self.i].transforms[0].rotation
+    # self.convert_to_euler(quart_sp.x, quart_sp.y, quart_sp.z, quart_sp.w)
 
-    delta_state = np.matrix([delta_pose.x,
-                             delta_lin_vel.x,
-                             delta_pose.y,
-                             delta_lin_vel.y,
-                             delta_pose.z,
-                             delta_lin_vel.z,
-                             delta_angle.x,
-                             delta_ang_vel.x,
-                             delta_angle.y,
-                             delta_ang_vel.y,
-                             delta_angle.z,
-                             delta_ang_vel.z])
-    delta_state = delta_state.T
-    TODO: Finish calculating LQR control
-    # LQR calculation in current state
-    Q = 10000 * np.identity(12)
-    R = np.identity(4)
-    K = self.dlqr(Q, R)
-    delta_u = np.dot(K, delta_state)
-    print("Delta u: {}\n", format(delta_u))
     # TODO: Finish calculating LQR control
 
     return delta_u[0], delta_u[1], delta_u[2], delta_u[3]

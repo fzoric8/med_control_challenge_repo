@@ -62,7 +62,7 @@ class LaunchBebop:
             queue_size=10)
 
         self.actuator_msg = Actuators()
-
+        
         # define vector for measured and setopint values
         self.pose_sp = Vector3(0., 0., 0.)
         self.euler_sp = Vector3(0., 0., 0.)
@@ -101,7 +101,6 @@ class LaunchBebop:
         # Pre-filter constants
         self.filt_const_x = 0.5
         self.filt_const_y = 0.5
-        self.filt_const_yaw = 0.5
         self.filt_const_z = 0.1
 
         # Post filter values

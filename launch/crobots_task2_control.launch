@@ -2,7 +2,7 @@
 
 <launch>
 
-    <!-- Include task1 launch file -->
+    <!-- Include task2 launch file -->
 	<include file="$(find med_uav_description)/launch/task2_world.launch" />
 
     <!-- Add trajectory control -->

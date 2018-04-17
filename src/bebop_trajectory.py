@@ -34,9 +34,6 @@ class BebopTrajectory:
         # Define magic thrust number :-)
         self.magic_number = 0.908
 
-        # Counter
-        self.i = -1
-
         # True if node received bebop trajectory, otherwise false
         self.trajectory_received = False
         self.first_measurement = False
@@ -87,29 +84,29 @@ class BebopTrajectory:
         self.p = 0
         self.q = 0
         self.r = 0
-        self.trajectory_points = []
         self.actuator_msg.angular_velocities = \
             [self.hover_speed, self.hover_speed, self.hover_speed, self.hover_speed]
-        self.t_old = 0
 
         # Controller rate
         # Trajectory points are being given with a frequency of 100Hz
         self.controller_rate = 100
         self.rate = rospy.Rate(self.controller_rate)
+        self.t_old = 0
+
+        # Initialize trajectory information
+        self.trajectory_index = 0
+        self.trajectory_point_count = -1
+        self.trajectory_points = []
 
     def setpoint_cb(self, data):
-
         self.pose_sp.x = data.x
         self.pose_sp.y = data.y
         self.pose_sp.z = data.z
 
     def angle_cb(self, data):
-
         self.euler_sp = Vector3(data.x, data.y, data.z)
 
     def odometry_callback(self, data):
-        """Callback function for odometry subscriber"""
-
         self.first_measurement = True
 
         self.x_mv = data.pose.pose.position.x
@@ -136,16 +133,23 @@ class BebopTrajectory:
 
     def trajectory_cb(self, data):
         self.trajectory_received = True
+        self.trajectory_point_count = len(data.points)
         self.trajectory_points = data.points
 
-    def convert_to_euler(self, qx, qy, qz, qw):
-        """Calculate roll, pitch and yaw angles/rates with quaternions"""
+    def quaternion2euler(self, qx, qy, qz, qw):
+        """
+        Calculate roll, pitch and yaw angles/rates with quaternions.
 
+        :returns:
+            This function returns following information:
+                pitch, roll, yaw,
+                pitch_rate, roll_rate, yaw_rate
+        """
         # conversion quaternion to euler (yaw - pitch - roll)
-        self.euler_mv.x = math.atan2(2 * (qw * qx + qy * qz), qw * qw
+        roll = math.atan2(2 * (qw * qx + qy * qz), qw * qw
                                      - qx * qx - qy * qy + qz * qz)
-        self.euler_mv.y = math.asin(2 * (qw * qy - qx * qz))
-        self.euler_mv.z = math.atan2(2 * (qw * qz + qx * qy), qw * qw
+        pitch = math.asin(2 * (qw * qy - qx * qz))
+        yaw = math.atan2(2 * (qw * qz + qx * qy), qw * qw
                                      + qx * qx - qy * qy - qz * qz)
 
         # gyro measurements (p,q,r)
@@ -153,22 +157,32 @@ class BebopTrajectory:
         q = self.q
         r = self.r
 
-        sx = math.sin(self.euler_mv.x)  # sin(roll)
-        cx = math.cos(self.euler_mv.x)  # cos(roll)
-        cy = math.cos(self.euler_mv.y)  # cos(pitch)
-        ty = math.tan(self.euler_mv.y)  # cos(pitch)
+        sx = math.sin(roll)  # sin(roll)
+        cx = math.cos(roll)  # cos(roll)
+        cy = math.cos(pitch)  # cos(pitch)
+        ty = math.tan(pitch)  # cos(pitch)
 
         # conversion gyro measurements to roll_rate, pitch_rate, yaw_rate
-        self.euler_rate_mv.x = p + sx * ty * q + cx * ty * r
-        self.euler_rate_mv.y = cx * q - sx * r
-        self.euler_rate_mv.z = sx / cy * q + cx / cy * r
+        roll_rate = p + sx * ty * q + cx * ty * r
+        pitch_rate = cx * q - sx * r
+        yaw_rate = sx / cy * q + cx / cy * r
+
+        return roll, pitch, yaw, roll_rate, pitch_rate, yaw_rate
 
     def dlqr(self, Q, R):
-        """Solve the discrete time lqr controller.
+        """
+        Solve the discrete time lqr controller.
 
         x[k+1] = A x[k] + B u[k]
 
         cost = sum x[k].T*Q*x[k] + u[k].T*R*u[k]
+
+        :param Q: Standard deviation of x[k]
+        :param R: Standard deviation of u[k]
+
+        :return:
+            K - Gain used for calculating thrust
+
         """
         phi = self.euler_mv.x
         theta = self.euler_mv.y
@@ -250,49 +264,64 @@ class BebopTrajectory:
         # compute the LQR gain
         K = np.matrix(scipy.linalg.inv(B.T * X * B + R) * (B.T * X * A))
 
+        # TODO: Remove eigenvalues/vector calculations (not needed?)
         eigVals, eigVecs = scipy.linalg.eig(A - B * K)
 
         return K, X, eigVals
 
     def run(self):
-        """ Run ROS node - computes motor speed for trajectory following using LQR algorithm """
+        """
+        Run ROS node - computes motor speed for trajectory following using LQR algorithm
+        """
 
         while not self.first_measurement:
-            print("LaunchBebop.run() - Waiting for first measurement.")
+            print("BebopTrajectory.run() - Waiting for first measurement.")
             rospy.sleep(self.sleep_sec)
 
-        print("LaunchBebop.run() - Starting position control")
+        print("BebopTrajectory.run() - Starting trajectory tracking")
         self.t_old = rospy.Time.now()
 
         while not rospy.is_shutdown():
             self.rate.sleep()
 
+            # Calculate new time inteval - dt
             t = rospy.Time.now()
             dt = (t - self.t_old).to_sec()
             self.t_old = t
 
+            # Check if trajectory is recieved
+            if not self.trajectory_received:
+                print("BebopTrajectory.run() - "
+                      "Waiting for trajectory on /bebop/trajectory_reference")
+                continue
+
+            # Don't evaluate sonner than controller rate specifies
             if dt < 0.99 / self.controller_rate:
                 continue
 
-            self.convert_to_euler(self.qx, self.qy, self.qz, self.qw)
+            # Compute conversion to euler
+            self.euler_mv.x, self.euler_mv.y, self.euler_mv.z, \
+                self.euler_rate_mv.x, self.euler_rate_mv.y, self.euler_rate_mv.z = \
+                self.quaternion2euler(self.qx, self.qy, self.qz, self.qw)
 
-            motor_speed1 = self.hover_speed
-            motor_speed2 = self.hover_speed
-            motor_speed3 = self.hover_speed
-            motor_speed4 = self.hover_speed
-            self.actuator_msg.angular_velocities = \
-                [self.magic_number * motor_speed1, self.magic_number * motor_speed2,
-                 motor_speed3, motor_speed4]
-
-            if self.trajectory_received:
-                self.i = 0
+            # Increase trajectory point index, check if finished
+            self.trajectory_index += 1
+            if self.trajectory_index >= self.trajectory_point_count:
+                print("BebopTrajectory.run() -"
+                      "Trajectory completed.")
                 self.trajectory_received = False
+                continue
 
-            if self.i >= 0:
-                self.pose_sp = self.trajectory_points[self.i].transforms[0].translation
-                quart_sp = self.trajectory_points[self.i].transforms[0].rotation
-                self.euler_sp = self.convert_to_euler(quart_sp.x, quart_sp.y, quart_sp.z, quart_sp.w)
-
+            # Assume trajectory is valid beyond this point
+            current_point = self.trajectory_points[self.trajectory_index]
+            delta_u1, delta_u2, delta_u3, delta_u4 = \
+                trajectory_tracking(
+                    current_point.transforms[0].translation,
+                    current_point.transforms[0].rotation,
+                    current_point.velocities[0].linear,
+                    current_point.velocities[0].angular,
+                    current_point.accelerations[0].linear,
+                    current_point.accelerations[0].angular)
 
             # Print out controller information
             if self.controller_info:
@@ -307,7 +336,47 @@ class BebopTrajectory:
                 print("Motor speeds are {}".format(self.actuator_msg.angular_velocities))
                 print("Current quadcopter height is: {}".format(self.z_mv))
 
+            motor_speed1 = self.actuator_msg.angular_velocities[0] + delta_u1
+            motor_speed2 = self.actuator_msg.angular_velocities[1] + delta_u2
+            motor_speed3 = self.actuator_msg.angular_velocities[2] + delta_u3
+            motor_speed4 = self.actuator_msg.angular_velocities[3] + delta_u4
+
+            # TODO: Check if self.magic_number^TM is needed in LQR control
+            self.actuator_msg.angular_velocities = \
+                [self.magic_number * motor_speed1, self.magic_number * motor_speed2,
+                 motor_speed3, motor_speed4]
+
+            # Publish Actuator message
             self.motor_pub.publish(self.actuator_msg)
+
+
+def trajectory_tracking(point, angle, lin_vel, ang_vel, lin_acc, ang_acc):
+    """
+    This function perfomrs trajectory tracking based on the current
+    quadrotor information and desired.
+
+    :param point: Desired point transform.
+    :param angle: Desired angle.
+    :param lin_vel: Desired linear velocity.
+    :param ang_vel: Desired angular velocity.
+    :param lin_acc: Desired linear acceleration.
+    :param ang_acc: Desired angular acceleration.
+
+    :return:
+        Returns thrust delta required to reach given point.
+        As 4 values:
+            delta_u1, delta_u2, delta_u3, delta_u4.
+    """
+    delta_u = [0, 0, 0, 0]
+
+    # TODO: Bouyou code below, beware!
+    # self.pose_sp = self.trajectory_points[self.trajectory_index].translation
+    # quart_sp = self.trajectory_points[self.i].transforms[0].rotation
+    # self.convert_to_euler(quart_sp.x, quart_sp.y, quart_sp.z, quart_sp.w)
+
+    # TODO: Finish calculating LQR control
+
+    return delta_u[0], delta_u[1], delta_u[2], delta_u[3]
 
 
 if __name__ == '__main__':

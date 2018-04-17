@@ -29,6 +29,7 @@ class LaunchBebop:
 
         self.first_measurement = False
         self.controller_info = False
+        self.wind_controller = True
 
         self.odom_subscriber = rospy.Subscriber(
             "bebop/odometry",
@@ -86,8 +87,13 @@ class LaunchBebop:
         self.pid_vz = PID(195.8, 0, 1.958, 300, -300)
 
         # Position loop
-        self.pid_x = PID(1, 0.03, 0.5, 0.2, -0.2)
-        self.pid_y = PID(1, 0.03, 0.5, 0.2, -0.2)
+        if self.wind_controller:
+            # TODO: Tune parameters
+            self.pid_x = PID(1, 0.03, 0.5, 0.2, -0.2)
+            self.pid_y = PID(1, 0.03, 0.5, 0.2, -0.2)
+        else:
+            self.pid_x = PID(0.3, 0, 0.05, 0.15, -0.15)
+            self.pid_y = PID(0.3, 0, 0.05, 0.15, -0.15)
 
         # outer_loops
         self.pitch_PID = PID(4.44309, 0.1, 0.2, 100, -100)
@@ -287,6 +293,7 @@ if __name__ == "__main__":
     try:
         launch_bebop = LaunchBebop()
         launch_bebop.controller_info = rospy.get_param("~verbose", False)
+        launch_bebop.wind_controller = rospy.get_param("~wind", True)
         launch_bebop.run()
     except rospy.ROSInterruptException:
         pass

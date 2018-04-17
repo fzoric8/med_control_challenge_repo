@@ -13,6 +13,8 @@
 		output="screen">
 
 		<param name="verbose" value="True" type="bool" />
+		<param name="wind" value="False" type="bool"	/>
+
 	</node>
 
 

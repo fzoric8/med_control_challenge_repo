@@ -68,6 +68,18 @@ class CameraProcessing:
                 cv2.line(img, (x1, y1), (x2, y2), (0, 0, 255), 5)
         return(img)
 
+    def drawHoughCircle(self, circles, img):
+        print(circles)
+        if circles is not None:
+            circles = np.uint(np.around(circles))
+            for i in circles[0, :]:
+                center = (i[0], i[1])
+                # circle center
+                cv2.circle(img, center, 1, (0, 100, 100), 3)
+                # circle outline
+                radius = i[2]
+                cv2.circle(img, radius, (255, 0, 255), 3)
+        return(img)
 
 
     def run(self):
@@ -83,20 +95,41 @@ class CameraProcessing:
             self.rate.sleep()
             #print(self.np_arr.shape)
             counter += 1
-            # image procssing
+
+            # image processing
             image_np = cv2.imdecode(self.np_arr, cv2.COLOR_BGR2GRAY)
             edges = cv2.Canny(image_np, 130, 200, apertureSize=3)
-            lines = cv2.HoughLines(edges, 2, np.pi/180, 150)
-            print(lines.shape)
-            cv2.imwrite("{save_dir}/photo_{counter}.png".format(SAVE_DIR, counter), edges)
-            img = self.draw_HoughImage(lines, image_np)
-            cv2.imwrite("{save_dir}/hough_{counter}.png".format(SAVE_DIR, counter), img)
+            gray = cv2.cvtColor(image_np, cv2.COLOR_BGR2GRAY)
+            gray = cv2.medianBlur(gray, 5)
+
+            # HOUGH LINES
+            # lines = cv2.HoughLines(edges, 2, np.pi/180, 150)
+            # img = self.draw_HoughImage(lines, image_np)
+            # print(lines.shape)
+
+            # HOUGH CIRCLES -> doesen't detect them
+            # rows = gray.shape[0]
+            # circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, 1, rows/8,
+            #                           param1=100, param2=30,
+            #                            minRadius=1, maxRadius=50)
+
+            # CORNER DETECTION -> few corners and maybe try to connect them 
+            corners = cv2.goodFeaturesToTrack(gray, 3, 0.01, 10)
+            corners = np.int0(corners)
+
+            for i in corners:
+                x, y = i.ravel()
+                cv2.circle(image_np, (x, y), 3, 255, -1)
+            cv2.imwrite("{0}/photo_{1}.png".format(SAVE_DIR, counter), gray)
+
+            # img = self.drawHoughCircle(circles, gray)
+            cv2.imwrite("{0}/hough_{1}.png".format(SAVE_DIR, counter), image_np)
 
             # Create published image
             msg = CompressedImage()
             msg.header.stamp = rospy.Time.now()
             msg.format = "jpeg"
-            msg.data = np.array(cv2.imencode('.jpg', img)[1]).tostring()
+            msg.data = np.array(cv2.imencode('.jpg', image_np)[1]).tostring()
 
             # Publish new image
             self.image_pub.publish(msg)

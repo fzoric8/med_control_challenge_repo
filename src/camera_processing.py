@@ -8,6 +8,7 @@ from sensor_msgs.msg import CompressedImage, LaserScan
 
 VERBOSE = True
 
+
 class CameraProcessing:
 
     def __init__(self):
@@ -62,6 +63,7 @@ class CameraProcessing:
 
         rospy.spin()
         print(self.range)
+
 
 if __name__=='__main__':
     rospy.init_node('camera_launch', anonymous=True)

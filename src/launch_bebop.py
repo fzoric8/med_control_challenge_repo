@@ -92,9 +92,9 @@ class LaunchBebop:
             self.pid_x = PID(0.7, 0.0001, 0.1, 0.4, -0.4)
             self.pid_y = PID(0.7, 0.0001, 0.1, 0.4, -0.4)
         else:
-            self.pid_z = PID(2, 0, 0, 3, -3)
-            self.pid_x = PID(0.3, 0.0, 0.01, 0.15, -0.15)
-            self.pid_y = PID(0.3, 0.0, 0.01, 0.15, -0.15)
+            self.pid_z = PID(4, 0.05, 0.1, 10, -10)
+            self.pid_x = PID(0.7, 0.0001, 0.1, 0.15, -0.15)
+            self.pid_y = PID(0.7, 0.0001, 0.1, 0.15, -0.15)
 
         # outer_loops
         self.pitch_PID = PID(4.44309, 0.1, 0.2, 100, -100)
@@ -256,13 +256,15 @@ class LaunchBebop:
             # Print out controller information
             if self.controller_info:
                 print(dt)
-                print("Comparison x:{}\nx_m:{}\ny:{}\ny_m:{}\nz:{}\nz_m{}".format(
+                print("Comparison x:{}\nx_m:{}\ny:{}\ny_m:{}\nz:{}\nz_m{}\nyaw:{}\nyaw_m:{}".format(
                     self.pose_sp.x,
                     self.x_mv,
                     self.pose_sp.y,
                     self.y_mv,
                     self.pose_sp.z,
-                    self.z_mv))
+                    self.z_mv,
+                    self.euler_sp.z,
+                    self.euler_mv.z))
                 print("Motor speeds are {}".format(self.actuator_msg.angular_velocities))
                 print("Current quadcopter height is: {}".format(self.z_mv))
                 print("Hover speed is: {}\n"

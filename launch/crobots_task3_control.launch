@@ -17,5 +17,12 @@
 
 	</node>
 
+	<!-- Add image processing -->
+	<node
+		pkg="crobots_med_control"
+		type="camera_processing.py"
+		name="camera_processing"
+		output="screen">
+	</node>
 
 </launch>

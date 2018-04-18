@@ -32,6 +32,7 @@ class BebopTrajectory:
         # Initial control values (u1, u2, u3, u4)
         self.u = np.array([5.45, 0, 0, 0])
 
+        # Motor speeds calculated from the initial control values
         self.motor_speeds = self.u2w(self.u)
 
         self.arm = self.l * math.cos(math.pi / 4)
@@ -42,7 +43,7 @@ class BebopTrajectory:
         # True if node received bebop trajectory, otherwise false
         self.trajectory_received = False
         self.first_measurement = False
-        self.controller_info = False
+        self.controller_info = True
 
         self.odom_subscriber = rospy.Subscriber(
             "bebop/odometry",
@@ -275,7 +276,7 @@ class BebopTrajectory:
 
     def trajectory_tracking(self, point, angle, lin_vel, ang_vel):
         """
-        This function perfomrs trajectory tracking based on the current
+        This function performs trajectory tracking based on the current
         quadrotor information and desired.
 
         :param point: Desired point transform.
@@ -302,7 +303,7 @@ class BebopTrajectory:
 
         # TODO: Finish calculating LQR control
         # LQR calculation in current state
-        Q = 1000 * np.identity(12)
+        Q = np.identity(12)
         R = np.identity(4)
         K = self.dlqr(Q, R)
 
@@ -416,8 +417,6 @@ class BebopTrajectory:
             self.actuator_msg.angular_velocities = \
                 [self.magic_number * self.motor_speeds[0], self.magic_number * self.motor_speeds[1],
                  self.motor_speeds[2], self.motor_speeds[3]]
-
-            print("Motor speeds are {}".format(self.actuator_msg.angular_velocities))
 
             # Publish Actuator message
             self.motor_pub.publish(self.actuator_msg)

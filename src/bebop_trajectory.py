@@ -9,7 +9,7 @@ from geometry_msgs.msg import Vector3
 from mav_msgs.msg import Actuators
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Float64
-from trajectory_msgs.msg import MultiDOFJointTrajectory
+from trajectory_msgs.msg import MultiDOFJointTrajectory, MultiDOFJointTrajectoryPoint
 
 
 class BebopTrajectory:
@@ -28,6 +28,11 @@ class BebopTrajectory:
         self.gravity = 9.81  # m/s^2   --> Gravity value
         self.sleep_sec = 0.5  # sleep duration while not getting first measurement
         self.hover_speed = 400
+
+        # Initial control values (u1, u2, u3, u4)
+        self.u = np.array([5.45, 0, 0, 0])
+
+        self.motor_speeds = self.u2w(self.u)
 
         self.arm = self.l * math.cos(math.pi / 4)
 
@@ -84,12 +89,14 @@ class BebopTrajectory:
         self.p = 0
         self.q = 0
         self.r = 0
+
         self.actuator_msg.angular_velocities = \
-            [self.hover_speed, self.hover_speed, self.hover_speed, self.hover_speed]
+            [self.magic_number * self.motor_speeds[0], self.magic_number*self.motor_speeds[1],
+             self.motor_speeds[2], self.motor_speeds[3]]
 
         # Controller rate
         # Trajectory points are being given with a frequency of 100Hz
-        self.controller_rate = 100
+        self.controller_rate = 50
         self.rate = rospy.Rate(self.controller_rate)
         self.t_old = 0
 
@@ -266,6 +273,70 @@ class BebopTrajectory:
 
         return K
 
+    def trajectory_tracking(self, point, angle, lin_vel, ang_vel):
+        """
+        This function perfomrs trajectory tracking based on the current
+        quadrotor information and desired.
+
+        :param point: Desired point transform.
+        :param angle: Desired angle.
+        :param lin_vel: Desired linear velocity.
+        :param ang_vel: Desired angular velocity.
+
+        :return:
+            Returns thrust delta required to reach given point.
+            As 4 values:
+                delta_u1, delta_u2, delta_u3, delta_u4.
+        """
+
+        delta_pose = Vector3(self.x_mv - point.x, self.y_mv - point.y, self.z_mv - point.z)
+        delta_angle = Vector3(self.euler_mv.x - angle.x, self.euler_mv.y - angle.y,
+                              self.euler_mv.z - angle.z)
+        delta_lin_vel = Vector3(self.vx_mv - lin_vel.x, self.vy_mv - lin_vel.y, self.vz_mv - lin_vel.z)
+        delta_ang_vel = Vector3(self.p - ang_vel.x, self.q - ang_vel.y, self.r - ang_vel.z)
+
+        delta_state = np.matrix([delta_pose.x, delta_lin_vel.x, delta_pose.y, delta_lin_vel.y,
+                                 delta_pose.z, delta_lin_vel.z, delta_angle.x, delta_ang_vel.x,
+                                 delta_angle.y, delta_ang_vel.y, delta_angle.z, delta_ang_vel.z])
+        delta_state = delta_state.T
+
+        # TODO: Finish calculating LQR control
+        # LQR calculation in current state
+        Q = 1000 * np.identity(12)
+        R = np.identity(4)
+        K = self.dlqr(Q, R)
+
+        delta_u = np.dot(K, delta_state)
+        array_u = np.array(delta_u.T)[0]
+
+        return array_u
+
+    def u2w(self, u):
+        """
+        Converts control inputs u1, u2, u3 and u4 into motor speeds
+
+        :param u: control inputs
+        :return: w: desired motor speeds
+        """
+        u_bare = [u[0]/self.bf, u[1]/(self.bf*self.l*0.7071),
+                  u[2]/(self.bf*self.l*0.7071), u[3]/(self.bm*self.bf)]
+
+        eq = [u_bare[0] - u_bare[1] - u_bare[2] - u_bare[3],
+              u_bare[0] + u_bare[1] - u_bare[2] + u_bare[3],
+              u_bare[0] + u_bare[1] + u_bare[2] - u_bare[3],
+              u_bare[0] - u_bare[1] + u_bare[2] + u_bare[3]]
+
+        w_eq = [0 if i < 0 else i for i in eq]
+
+        w1 = math.sqrt(w_eq[0]) / 2
+        w2 = math.sqrt(w_eq[1]) / 2
+        w3 = math.sqrt(w_eq[2]) / 2
+        w4 = math.sqrt(w_eq[3]) / 2
+
+        w = np.array([w1, w2, w3, w4])
+
+        return w
+
     def run(self):
         """
         Run ROS node - computes motor speed for trajectory following using LQR algorithm
@@ -281,7 +352,7 @@ class BebopTrajectory:
         while not rospy.is_shutdown():
             self.rate.sleep()
 
-            # Calculate new time inteval - dt
+            # Calculate new time interval - dt
             t = rospy.Time.now()
             dt = (t - self.t_old).to_sec()
             self.t_old = t
@@ -297,28 +368,30 @@ class BebopTrajectory:
 
             # If trajectory isn't received, LQR is used for point following
             if not self.trajectory_received:
+                pose = self.pose_sp
+                angle = self.euler_sp
+                lin_vel = Vector3(0., 0., 0.)
+                ang_vel = Vector3(0., 0., 0.)
+            else:
+                current_point = self.trajectory_points[self.trajectory_index]
+                pose = current_point.transforms[0].translation
+                angle_q = current_point.transforms[0].rotation
 
+                angle.x, angle.y, angle.z, _, _, _ = self.quaternion2euler(angle_q.x, angle_q.y, angle_q.z, angle_q.w)
+                lin_vel = current_point.velocities[0].linear
+                ang_vel = current_point.velocities[0].angular
 
-            # Increase trajectory point index, check if finished
-            self.trajectory_index += 1
-            print("BebopTrajectory.run() - point {} / {}\ndt: {}"
-                  .format(self.trajectory_index, self.trajectory_point_count, dt))
-            if self.trajectory_index >= self.trajectory_point_count:
-                print("BebopTrajectory.run() -"
-                      "Trajectory completed.")
-                self.trajectory_received = False
-                continue
+                # Increase trajectory point index, check if finished
+                self.trajectory_index += 1
+                print("BebopTrajectory.run() - point {} / {}\ndt: {}"
+                      .format(self.trajectory_index, self.trajectory_point_count, dt))
+                if self.trajectory_index >= self.trajectory_point_count:
+                    print("BebopTrajectory.run() -"
+                          "Trajectory completed.")
+                    self.trajectory_received = False
+                    self.trajectory_index = 0
 
-            # Assume trajectory is valid beyond this point
-            current_point = self.trajectory_points[self.trajectory_index]
-            delta_u1, delta_u2, delta_u3, delta_u4 = \
-                self.trajectory_tracking(
-                    current_point.transforms[0].translation,
-                    current_point.transforms[0].rotation,
-                    current_point.velocities[0].linear,
-                    current_point.velocities[0].angular,
-                    current_point.accelerations[0].linear,
-                    current_point.accelerations[0].angular)
+            delta_u = self.trajectory_tracking(pose, angle, lin_vel, ang_vel)
 
             # Print out controller information
             if self.controller_info:
@@ -333,63 +406,21 @@ class BebopTrajectory:
                 print("Motor speeds are {}".format(self.actuator_msg.angular_velocities))
                 print("Current quadcopter height is: {}".format(self.z_mv))
 
-            motor_speed1 = self.actuator_msg.angular_velocities[0] + delta_u1
-            motor_speed2 = self.actuator_msg.angular_velocities[1] + delta_u2
-            motor_speed3 = self.actuator_msg.angular_velocities[2] + delta_u3
-            motor_speed4 = self.actuator_msg.angular_velocities[3] + delta_u4
+            self.u = self.u + delta_u
+            u_temp = self.u
+            u_temp[0] = u_temp.item(0)/(math.cos(self.euler_mv.x) * math.cos(self.euler_mv.y))
+            self.motor_speeds = self.u2w(u_temp)
 
             # TODO: Check if self.magic_number^TM is needed in LQR control
+
             self.actuator_msg.angular_velocities = \
-                [self.magic_number * motor_speed1, self.magic_number * motor_speed2,
-                 motor_speed3, motor_speed4]
+                [self.magic_number * self.motor_speeds[0], self.magic_number * self.motor_speeds[1],
+                 self.motor_speeds[2], self.motor_speeds[3]]
+
+            print("Motor speeds are {}".format(self.actuator_msg.angular_velocities))
 
             # Publish Actuator message
             self.motor_pub.publish(self.actuator_msg)
-
-    def trajectory_tracking(self, point, angle, lin_vel, ang_vel, lin_acc, ang_acc):
-        """
-        This function perfomrs trajectory tracking based on the current
-        quadrotor information and desired.
-
-        :param point: Desired point transform.
-        :param angle: Desired angle.
-        :param lin_vel: Desired linear velocity.
-        :param ang_vel: Desired angular velocity.
-        :param lin_acc: Desired linear acceleration.
-        :param ang_acc: Desired angular acceleration.
-
-        :return:
-            Returns thrust delta required to reach given point.
-            As 4 values:
-                delta_u1, delta_u2, delta_u3, delta_u4.
-        """
-        delta_u = [0, 0, 0, 0]
-        euler_angle = Vector3(0., 0., 0.)
-        euler_rate = Vector3(0., 0., 0.)
-
-        euler_angle.x, euler_angle.y, euler_angle.z, euler_rate.x, euler_rate.y, euler_rate.z = \
-            self.quaternion2euler(angle.x, angle.y, angle.z, angle.w)
-
-        delta_pose = Vector3(self.x_mv - point.x, self.y_mv - point.y, self.z_mv - point.z)
-        delta_angle = Vector3(self.euler_mv.x - euler_angle.x, self.euler_mv.y - euler_angle.y,
-                              self.euler_mv.z - euler_angle.z)
-        delta_lin_vel = Vector3(self.vx_mv - lin_vel.x, self.vy_mv - lin_vel.y, self.vz_mv - lin_vel.z)
-        delta_ang_vel = Vector3(self.p - ang_vel.x, self.q - ang_vel.y, self.r - ang_vel.z)
-
-        delta_state = np.matrix([delta_pose.x, delta_lin_vel.x, delta_pose.y, delta_lin_vel.y,
-                                 delta_pose.z, delta_lin_vel.z, delta_angle.x, delta_ang_vel.x,
-                                 delta_angle.y, delta_ang_vel.y, delta_angle.z, delta_ang_vel.z])
-        delta_state = delta_state.T
-
-        # TODO: Finish calculating LQR control
-        # LQR calculation in current state
-        Q = 10000 * np.identity(12)
-        R = np.identity(4)
-        K = self.dlqr(Q, R)
-
-        delta_u = np.dot(K, delta_state)
-        print("Delta u: {}\n", format(delta_u))
-        return delta_u[0], delta_u[1], delta_u[2], delta_u[3]
 
 
 if __name__ == '__main__':

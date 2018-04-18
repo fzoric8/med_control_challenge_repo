@@ -119,7 +119,6 @@ class CameraProcessing:
             theta = line[0][1]
 
             theta_temp = abs(theta - math.pi/2)
-            print(theta_temp)
             avg_theta += (theta_temp - math.pi/2)**4
 
             a = np.cos(theta)
@@ -134,7 +133,7 @@ class CameraProcessing:
             cv2.line(img, (x1, y1), (x2, y2), (0, 0, 255), 5)
 
         avg_theta /= len(lines)
-        print("Average theta: ", avg_theta)
+        print("Current error: ", avg_theta)
 
         self.error_pub.publish(avg_theta)
 

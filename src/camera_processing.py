@@ -125,6 +125,18 @@ class CameraProcessing:
             # Publish new image
             self.image_pub.publish(msg)
 
+    def get_normal(self, img):
+        # changing RGB to BW
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        # Adding median blur to photo
+        gray = cv2.medianBlur(gray, 5)
+
+        # Applying threshold to images
+        th = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+
+        
+
     def draw_hough_lines(self, lines, img):
         """
         Draw Hough lines on the given image

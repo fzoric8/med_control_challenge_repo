@@ -3,7 +3,7 @@
 
 import rospy
 import math
-
+import numpy as np
 from geometry_msgs.msg import Vector3
 from mav_msgs.msg import Actuators
 from nav_msgs.msg import Odometry
@@ -46,9 +46,15 @@ class BebopCircleFlight:
             self.fc_callback)
         self.forward = 1    # 1 Is forward, 0 is backward
         self.start = 0      # 1 is start, 0 is stop
+        self.i = 0
 
         # Sleep time if no measurement found
         self.sleep_sec = 2
+
+        self.x_list = []
+        self.y_list = []
+        self.theta_list = []
+        self.d_theta = 2  # angle discretisation
 
         # Crontroller rate
         self.controller_rate = 1
@@ -128,10 +134,31 @@ class BebopCircleFlight:
         self.initial_z = self.curr_z
         self.initial_yaw = self.curr_yaw
 
-        self.takeoff()
+        self.windmill_x = self.initial_x + math.cos(self.initial_yaw) * (self.windmill_radius + self.back_dist)
+        self.windmill_y = self.initial_y + math.sin(self.initial_yaw) * (self.windmill_radius + self.back_dist)
 
-        # Initialize angle offset
-        angle_offset = - math.pi / 2
+        for i in range(360 // self.d_theta):
+            x, y = self.windmill_x + self.windmill_radius * np.cos(i * np.deg2rad(self.d_theta)), \
+                   self.windmill_y + self.windmill_radius * np.sin(i * np.deg2rad(self.d_theta))
+            theta_p = -(180 - i * self.d_theta)
+            self.x_list.append(x)
+            self.y_list.append(y)
+            self.theta_list.append(np.deg2rad(theta_p))
+
+        distances = []
+
+        for i in zip(self.x_list, self.y_list):
+            distances.append(abs(i[0] - self.initial_x) + abs(i[1] - self.initial_y))
+
+        dis_array = np.array(distances)
+        i_min = np.argmin(dis_array)
+        list_len = len(self.x_list)
+
+        self.circle_x = self.x_list[i_min:list_len] + self.x_list[0:i_min]
+        self.circle_y = self.y_list[i_min:list_len] + self.y_list[0:i_min]
+        self.circle_theta = self.theta_list[i_min:list_len] + self.theta_list[0:i_min]
+
+        self.takeoff()
 
         while not rospy.is_shutdown():
             self.rate.sleep()
@@ -141,9 +168,9 @@ class BebopCircleFlight:
                 print("CircleFlight.run() - Waiting for flight_control")
                 continue
 
-            self.pos_ref_msg.y = self.initial_y - self.windmill_radius * math.cos(angle_offset)
-            self.pos_ref_msg.x = self.initial_x + self.windmill_radius + self.back_dist + self.windmill_radius * math.sin(angle_offset)
-            self.ang_ref_msg.z = ( (self.initial_yaw + angle_offset) + math.pi / 2 ) % (2 * math.pi)
+            self.pos_ref_msg.y = self.circle_y[self.i]
+            self.pos_ref_msg.x = self.circle_x[self.i]
+            self.ang_ref_msg.z = self.circle_theta[self.i]
 
             print("X_off: {}, y_off: {}, yaw_off: {}"
                   .format(self.pos_ref_msg.x, self.pos_ref_msg.y, self.ang_ref_msg.z))
@@ -155,8 +182,11 @@ class BebopCircleFlight:
             self.ang_ref_pub.publish(self.ang_ref_msg)
             rospy.sleep(0.1)
 
-            # Increase angle delta
-            angle_offset += self.forward * self.angle_delta
+            self.i += int(self.forward)
+            if self.i > (list_len - 1):
+                self.i = 0
+            elif self.i < 0:
+                self.i = (list_len - 1)
 
     def get_current_position(self):
         """
@@ -179,7 +209,7 @@ class BebopCircleFlight:
         self.pos_ref_msg.z = self.windmill_height
         self.pos_ref_pub.publish(self.pos_ref_msg)
 
-        print("BebopCircleFlight() - takeff completed.")
+        print("BebopCircleFlight() - takeoff completed.")
         rospy.sleep(self.sleep_sec)
 
     def fc_callback(self, data):

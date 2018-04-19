@@ -84,10 +84,11 @@ class CameraProcessing:
         while not self.first_image_captured:
             rospy.sleep(2)
 
-        print("CameraProcessing.run() - Flight control - Start in 5 seconds")
-        rospy.sleep(5)
+        print("CameraProcessing.run() - Flight control - Start")
         self.fc_pub.publish(self.fc_msg)
         print("CameraProcessing.run()")
+        rospy.sleep(5)
+
         while not rospy.is_shutdown():
 
             # little sleepy boy

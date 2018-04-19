@@ -79,7 +79,7 @@ class BebopTrajectory:
 
         self.actuator_msg = Actuators()
 
-        self.q_gain = 10e10
+        self.q_gain = 1
         self.r_gain = 1
 
         # define vector for measured and setpoint values
@@ -97,7 +97,7 @@ class BebopTrajectory:
 
         # Controller rate
         # Trajectory points are being given with a frequency of 100Hz
-        self.controller_rate = 50
+        self.controller_rate = 1
         self.rate = rospy.Rate(self.controller_rate)
         self.t_old = 0
 
@@ -265,8 +265,11 @@ class BebopTrajectory:
         X = np.matrix(scipy.linalg.solve_discrete_are(A, B, Q, R))
 
         # compute the LQR gain
-        K = np.matrix(scipy.linalg.inv(B.T * X * B + R) * (B.T * X * A))
+        K_1 = np.linalg.multi_dot([B.T, X, B]) + R
+        K_2 = np.linalg.multi_dot([B.T, X, A])
+        K = np.matrix(np.dot(scipy.linalg.inv(K_1), K_2))
 
+        print("K: ", K)
         return K
 
     def trajectory_tracking(self, point, angle, lin_vel, ang_vel, lin_acc):
@@ -295,6 +298,7 @@ class BebopTrajectory:
         delta_state = np.matrix([delta_pose.x, delta_lin_vel.x, delta_pose.y, delta_lin_vel.y,
                                  delta_pose.z, delta_lin_vel.z, delta_angle.x, delta_ang_vel.x,
                                  delta_angle.y, delta_ang_vel.y, delta_angle.z, delta_ang_vel.z])
+        print("Delta state: ", delta_state)
         delta_state = delta_state.T
 
         # TODO: Finish calculating LQR control
@@ -409,7 +413,8 @@ class BebopTrajectory:
 
             # u_star - desired control value
             u_star = np.array([self.mass * (self.gravity + lin_acc.z) , 0, 0, 0])
-
+            print("u_star: ", u_star)
+            print("delta_u: ", delta_u)
             u = u_star + delta_u
             u_temp = u
             u_temp[0] = u_temp.item(0)/(math.cos(self.euler_mv.x) * math.cos(self.euler_mv.y))

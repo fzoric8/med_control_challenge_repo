@@ -8,6 +8,7 @@ from mav_msgs.msg import Actuators
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Float64
 from pid import PID
+from trajectory_msgs.msg import MultiDOFJointTrajectory
 
 
 class LaunchBebop:
@@ -60,6 +61,10 @@ class LaunchBebop:
             '/gazebo/command/motor_speed',
             Actuators,
             queue_size=10)
+        self.trajectory_subscriber = rospy.Subscriber(
+            "/bebop/trajectory_reference",
+            MultiDOFJointTrajectory,
+            self.trajectory_cb)
 
         self.actuator_msg = Actuators()
         
@@ -111,6 +116,11 @@ class LaunchBebop:
         # Define magic thrust number :-)
         self.magic_number = 0.908
 
+        # Initialize trajectory information
+        self.trajectory_index = 0
+        self.trajectory_point_count = -1
+        self.trajectory_points = []
+
     def setpoint_cb(self, data):
 
         self.pose_sp.x = data.x
@@ -147,6 +157,11 @@ class LaunchBebop:
         self.x_gt_mv = data.pose.pose.position.x
         self.y_gt_mv = data.pose.pose.position.y
         self.z_gt_mv = data.pose.pose.position.z
+
+    def trajectory_cb(self, data):
+        self.trajectory_received = True
+        self.trajectory_point_count = len(data.points)
+        self.trajectory_points = data.points
 
     def convert_to_euler(self, qx, qy, qz, qw):
         """Calculate roll, pitch and yaw angles/rates with quaternions"""

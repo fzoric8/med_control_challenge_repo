@@ -13,4 +13,14 @@
 		output="screen">
 	</node>
 
+	<!-- Add trajectory control -->
+	<node
+		pkg="crobots_med_control"
+		type="launch_bebop.py"
+		name="launch_bebop"
+		output="screen">
+
+		<param name="verbose" value="True" type="bool" />
+	</node>
+
 </launch>

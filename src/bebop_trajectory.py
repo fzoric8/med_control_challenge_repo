@@ -29,11 +29,8 @@ class BebopTrajectory:
         self.sleep_sec = 0.5  # sleep duration while not getting first measurement
         self.hover_speed = 400
 
-        # Initial control values (u1, u2, u3, u4)
-        self.u = np.array([5.45, 0, 0, 0])
-
         # Motor speeds calculated from the initial control values
-        self.motor_speeds = self.u2w(self.u)
+        self.motor_speeds = [0, 0, 0, 0]
 
         self.arm = self.l * math.cos(math.pi / 4)
 
@@ -81,6 +78,9 @@ class BebopTrajectory:
             queue_size=10)
 
         self.actuator_msg = Actuators()
+
+        self.q_gain = 10e10
+        self.r_gain = 1
 
         # define vector for measured and setpoint values
         self.pose_sp = Vector3(0., 0., 0.)
@@ -177,7 +177,7 @@ class BebopTrajectory:
 
         return roll, pitch, yaw, roll_rate, pitch_rate, yaw_rate
 
-    def dlqr(self, Q, R):
+    def dlqr(self, Q, R, point, angle, lin_vel, ang_vel, lin_acc):
         """
         Solve the discrete time lqr controller.
 
@@ -192,20 +192,15 @@ class BebopTrajectory:
             K - Gain used for calculating thrust
 
         """
-        phi = self.euler_mv.x
-        theta = self.euler_mv.y
-        psi = self.euler_mv.z
+        phi = angle.x
+        theta = angle.y
+        psi = angle.z
 
-        p = self.p
-        q = self.q
-        r = self.r
+        p = ang_vel.x
+        q = ang_vel.y
+        r = ang_vel.z
 
-        w1 = self.actuator_msg.angular_velocities[0]
-        w2 = self.actuator_msg.angular_velocities[1]
-        w3 = self.actuator_msg.angular_velocities[2]
-        w4 = self.actuator_msg.angular_velocities[3]
-
-        u1 = math.cos(phi) * math.cos(theta) * self.bf * (w1**2 + w2**2 + w3**2 + w4**2)
+        u1 = self.mass * (self.gravity + lin_acc.z)
 
         c1 = (math.cos(phi) * math.sin(theta) * math.cos(psi) + math.sin(phi) * math.sin(psi)) / self.mass
         c2 = (math.cos(phi) * math.sin(theta) * math.sin(psi) - math.sin(phi) * math.cos(psi)) / self.mass
@@ -274,7 +269,7 @@ class BebopTrajectory:
 
         return K
 
-    def trajectory_tracking(self, point, angle, lin_vel, ang_vel):
+    def trajectory_tracking(self, point, angle, lin_vel, ang_vel, lin_acc):
         """
         This function performs trajectory tracking based on the current
         quadrotor information and desired.
@@ -283,6 +278,7 @@ class BebopTrajectory:
         :param angle: Desired angle.
         :param lin_vel: Desired linear velocity.
         :param ang_vel: Desired angular velocity.
+        :param lin_acc: Desired linear acceleration.
 
         :return:
             Returns thrust delta required to reach given point.
@@ -303,9 +299,9 @@ class BebopTrajectory:
 
         # TODO: Finish calculating LQR control
         # LQR calculation in current state
-        Q = np.identity(12)
-        R = np.identity(4)
-        K = self.dlqr(Q, R)
+        Q = self.q_gain * np.identity(12)
+        R = self.r_gain * np.identity(4)
+        K = self.dlqr(Q, R, point, angle, lin_vel, ang_vel, lin_acc)
 
         delta_u = np.dot(K, delta_state)
         array_u = np.array(delta_u.T)[0]
@@ -373,6 +369,8 @@ class BebopTrajectory:
                 angle = self.euler_sp
                 lin_vel = Vector3(0., 0., 0.)
                 ang_vel = Vector3(0., 0., 0.)
+                lin_acc = Vector3(0., 0., 0.)
+                ang_acc = Vector3(0., 0., 0.)
             else:
                 current_point = self.trajectory_points[self.trajectory_index]
                 pose = current_point.transforms[0].translation
@@ -381,6 +379,8 @@ class BebopTrajectory:
                 angle.x, angle.y, angle.z, _, _, _ = self.quaternion2euler(angle_q.x, angle_q.y, angle_q.z, angle_q.w)
                 lin_vel = current_point.velocities[0].linear
                 ang_vel = current_point.velocities[0].angular
+                lin_acc = current_point.accelerations[0].linear
+                ang_acc = current_point.accelerations[0].angular
 
                 # Increase trajectory point index, check if finished
                 self.trajectory_index += 1
@@ -392,7 +392,7 @@ class BebopTrajectory:
                     self.trajectory_received = False
                     self.trajectory_index = 0
 
-            delta_u = self.trajectory_tracking(pose, angle, lin_vel, ang_vel)
+            delta_u = self.trajectory_tracking(pose, angle, lin_vel, ang_vel, lin_acc)
 
             # Print out controller information
             if self.controller_info:
@@ -407,8 +407,11 @@ class BebopTrajectory:
                 print("Motor speeds are {}".format(self.actuator_msg.angular_velocities))
                 print("Current quadcopter height is: {}".format(self.z_mv))
 
-            self.u = self.u + delta_u
-            u_temp = self.u
+            # u_star - desired control value
+            u_star = np.array([self.mass * (self.gravity + lin_acc.z) , 0, 0, 0])
+
+            u = u_star + delta_u
+            u_temp = u
             u_temp[0] = u_temp.item(0)/(math.cos(self.euler_mv.x) * math.cos(self.euler_mv.y))
             self.motor_speeds = self.u2w(u_temp)
 

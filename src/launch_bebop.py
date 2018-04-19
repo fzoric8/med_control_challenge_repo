@@ -93,13 +93,13 @@ class LaunchBebop:
             self.pid_y = PID(0.7, 0.0001, 0.1, 0.4, -0.4)
         else:
             self.pid_z = PID(4, 0.05, 0.1, 10, -10)
-            self.pid_x = PID(0.7, 0.0001, 0.1, 0.15, -0.15)
-            self.pid_y = PID(0.7, 0.0001, 0.1, 0.15, -0.15)
+            self.pid_x = PID(0.4, 0.001, 0.1, 0.2, -0.2)
+            self.pid_y = PID(0.4, 0.001, 0.1, 0.2, -0.2)
 
         # outer_loops
         self.pitch_PID = PID(4.44309, 0.1, 0.2, 100, -100)
         self.roll_PID = PID(4.44309, 0.1, 0.2, 100, -100)
-        self.yaw_PID = PID(10, 0.004, 0.2, 150, -150)
+        self.yaw_PID = PID(20, 1, 0.0, 150, -150)
 
         # inner_loops
         self.pitch_rate_PID = PID(16.61, 0, 0, 100, -100)

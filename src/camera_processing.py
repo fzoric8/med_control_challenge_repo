@@ -7,6 +7,7 @@ import numpy as np
 import cv2
 from sensor_msgs.msg import CompressedImage, LaserScan
 from std_msgs.msg import Float64
+from geometry_msgs.msg import Vector3
 
 
 class CameraProcessing:
@@ -38,12 +39,23 @@ class CameraProcessing:
             CompressedImage,
             self.compressed_image_cb)
 
+        # Flight control publisher
+        self.fc_pub = rospy.Publisher(
+            "bebop/flight_control",
+            Vector3,
+            queue_size=10)
+        self.fc_msg = Vector3()
+        self.fc_msg.x = 1
+        self.fc_msg.y = 1
+        self.fc_msg.z = 0
+
         # Image processing rate
         self.cam_rate = 50
         self.rate = rospy.Rate(self.cam_rate)
 
         # Image array being processed
         self.img_array = []
+        self.avg_theta = 1000
 
     def laser_cb(self, laser_msg):
         self.range = laser_msg.ranges[0]
@@ -72,6 +84,10 @@ class CameraProcessing:
         while not self.first_image_captured:
             rospy.sleep(2)
 
+        print("CameraProcessing.run() - Flight control - Start in 5 seconds")
+        rospy.sleep(5)
+        self.fc_pub.publish(self.fc_msg)
+        print("CameraProcessing.run()")
         while not rospy.is_shutdown():
 
             # little sleepy boy
@@ -86,10 +102,18 @@ class CameraProcessing:
             # If no lines are found punish and continue
             if lines is None:
                 print("CameraProcessing.run() - no lines found")
-                self.error_pub.publish(500.0)
+                self.avg_theta = 500
+                self.error_pub.publish(self.avg_theta)
                 continue
 
-            print("CameraProcessing.run() - found lines {}".format(lines.shape[0]))
+            if self.avg_theta < 10e-6:
+
+                print("CameraProcessing.run() - Flight control - Stop")
+                # Signal to flight control to stop
+                self.fc_msg.y = 0
+                self.fc_pub.publish(self.fc_msg)
+
+            #print("CameraProcessing.run() - found lines {}".format(lines.shape[0]))
             img = self.draw_hough_lines(lines, decoded_image)
 
             # Create published image
@@ -111,7 +135,7 @@ class CameraProcessing:
         :return: Image with drawn lines
         """
 
-        avg_theta = 0
+        self.avg_theta = 0
         for line in lines:
 
             # Extract line info
@@ -119,7 +143,7 @@ class CameraProcessing:
             theta = line[0][1]
 
             theta_temp = abs(theta - math.pi/2)
-            avg_theta += (theta_temp - math.pi/2)**4
+            self.avg_theta += (theta_temp - math.pi/2)**4
 
             a = np.cos(theta)
             b = np.sin(theta)
@@ -132,10 +156,10 @@ class CameraProcessing:
 
             cv2.line(img, (x1, y1), (x2, y2), (0, 0, 255), 5)
 
-        avg_theta /= len(lines)
-        print("Current error: ", avg_theta)
+        self.avg_theta /= len(lines)
+        print("Current error: ", self.avg_theta)
 
-        self.error_pub.publish(avg_theta)
+        self.error_pub.publish(self.avg_theta)
 
         return img
 

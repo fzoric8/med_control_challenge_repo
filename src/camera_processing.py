@@ -212,7 +212,6 @@ class CameraProcessing:
 
         # Applying threshold to images
         th = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
-
         
         cv2.imwrite("~/catkin_ws/src/med_challenge/crobots_med_control/photo_1.png", th)
 

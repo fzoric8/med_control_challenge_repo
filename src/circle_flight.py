@@ -127,6 +127,14 @@ class BebopCircleFlight:
             print("BebopCircleFlight.run() - Waiting for first measurement.")
             rospy.sleep(self.sleep_sec)
 
+        while self.start == 0:
+            print("BebopCircleFlight.run() - Waiting for flight control.")
+            rospy.sleep(self.sleep_sec)
+
+        # Takeoff
+        self.get_current_position()
+        self.takeoff()
+
         # Get initial position
         self.get_current_position()
         self.initial_x = self.curr_x
@@ -158,14 +166,12 @@ class BebopCircleFlight:
         self.circle_y = self.y_list[i_min:list_len] + self.y_list[0:i_min]
         self.circle_theta = self.theta_list[i_min:list_len] + self.theta_list[0:i_min]
 
-        self.takeoff()
-
         while not rospy.is_shutdown():
             self.rate.sleep()
             self.get_current_position()
 
             if self.start == 0:
-                print("CircleFlight.run() - Waiting for flight_control")
+                print("CircleFlight.run() - Flight control - Stop.")
                 continue
 
             self.pos_ref_msg.y = self.circle_y[self.i]
@@ -183,6 +189,7 @@ class BebopCircleFlight:
             rospy.sleep(0.1)
 
             self.i += int(self.forward)
+            print(self.i)
             if self.i > (list_len - 1):
                 self.i = 0
             elif self.i < 0:
@@ -202,15 +209,14 @@ class BebopCircleFlight:
     def takeoff(self):
         # Take - off
         print("BebopCircleFlight() - takeoff ready.")
-        rospy.sleep(self.sleep_sec)
 
-        self.pos_ref_msg.x = self.back_dist * math.cos(self.curr_yaw)
-        self.pos_ref_msg.y = self.back_dist * math.sin(self.curr_yaw)
+        self.pos_ref_msg.x = self.curr_x
+        self.pos_ref_msg.y = self.curr_y
         self.pos_ref_msg.z = self.windmill_height
         self.pos_ref_pub.publish(self.pos_ref_msg)
 
         print("BebopCircleFlight() - takeoff completed.")
-        rospy.sleep(self.sleep_sec)
+        rospy.sleep(3 * self.sleep_sec)
 
     def fc_callback(self, data):
         self.forward = data.x

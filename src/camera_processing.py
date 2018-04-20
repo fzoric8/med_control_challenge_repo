@@ -5,6 +5,7 @@ import rospy
 import math
 import numpy as np
 import cv2
+from nav_msgs.msg import Odometry
 from sensor_msgs.msg import CompressedImage, LaserScan
 from std_msgs.msg import Float64
 from geometry_msgs.msg import Vector3
@@ -19,6 +20,7 @@ class CameraProcessing:
         """
         Initialize ros publisher, ros subscriber
         """
+        self.normal = Vector3(0., 0., 0.)
 
         # Output image publishers
         self.image_pub = rospy.Publisher(
@@ -42,6 +44,12 @@ class CameraProcessing:
         # Flight control publisher
         self.fc_pub = rospy.Publisher(
             "bebop/flight_control",
+            Vector3,
+            queue_size=10)
+
+        # Plane of rotation normal publisher
+        self.normal_pub = rospy.Publisher(
+            "bebop/plane_of_rotation_normal",
             Vector3,
             queue_size=10)
 
@@ -187,6 +195,7 @@ class CameraProcessing:
                     self.get_current_yaw()
                     self.img_saved = True
                     self.get_normal(decoded_image)
+                    self.normal_pub.publish(self.normal)
 
             #print("CameraProcessing.run() - found lines {}".format(lines.shape[0]))
             img = self.draw_hough_lines(lines, decoded_image)
@@ -203,19 +212,48 @@ class CameraProcessing:
     def get_normal(self, img):
 
         pix_top = 0
-        pix_bottom = 0
-        # changing RGB to BW
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        pix_mid = 0
+        side = ''
+        windmill_yaw_correction = math.pi / 2
 
+        # changing RGB to BW
         # Adding median blur to photo
-        gray = cv2.medianBlur(gray, 5)
+        blur = cv2.medianBlur(img, 9)
+        gray = cv2.cvtColor(blur, cv2.COLOR_BGR2GRAY)
 
         # Applying threshold to images
-        th = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
-        
-        cv2.imwrite("~/catkin_ws/src/med_challenge/crobots_med_control/photo_1.png", th)
+        th = cv2.bitwise_not(cv2.adaptiveThreshold(
+            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2))
 
-        return
+        # searching for horizon y pixel and top windmill x pixel
+        for i in range(200, 800):
+            if not pix_top:
+                if th[i, :].any():
+                    for j in range(500, 1500):
+                        if th[i, j]:
+                            pix_top = j
+
+            if th[i, 0:30].any():
+                pix_mid = i - 30
+                break
+
+        for i in range(pix_top - 200, pix_top):
+            i_2 = 2 * pix_top - i
+            if th[(pix_mid - 100):pix_mid, i].any():
+                windmill_yaw_correction *= -1
+                side = 'r'
+                break
+            elif th[(pix_mid - 100):pix_mid, i_2].any():
+                side = 'l'
+                break
+
+        windmill_yaw = self.curr_yaw + windmill_yaw_correction
+
+        self.normal.x = np.cos(windmill_yaw)
+        self.normal.y = np.sin(windmill_yaw)
+
+        print("DRONE YAW: {}".format(self.curr_yaw))
+        print("PIX MID: {}\nPIX TOP: {}\nSIDE: {}\nNORMAL: {}".format(pix_mid, pix_top, side, self.normal))
 
     def draw_hough_lines(self, lines, img):
         """

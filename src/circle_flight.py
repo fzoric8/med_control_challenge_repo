@@ -54,7 +54,7 @@ class BebopCircleFlight:
         self.x_list = []
         self.y_list = []
         self.theta_list = []
-        self.d_theta = 2  # angle discretisation
+        self.d_theta = 3  # angle discretisation
 
         # Crontroller rate
         self.controller_rate = 1

@@ -31,7 +31,8 @@ class LaunchBebop:
 
         self.first_measurement = False
         self.controller_info = rospy.get_param("~verbose", False)
-        self.wind_controller = rospy.get_param("~wind", True)
+        self.wind_controller = rospy.get_param("~wind", False)
+        self.hoover = rospy.get_param("~hoover", False)
 
         self.odom_subscriber = rospy.Subscriber(
             "bebop/odometry",
@@ -74,7 +75,10 @@ class LaunchBebop:
         self.actuator_msg = Actuators()
         
         # define vector for measured and setopint values
-        self.pose_sp = Vector3(0., 0., 0.)
+        if self.hoover == True:
+            self.pose_sp = Vector3(0., 0., 1.)
+        else:
+            self.pose_sp = Vector3(0., 0., 0.)
         self.euler_sp = Vector3(0., 0., 0.)
         self.euler_mv = Vector3(0., 0., 0.)
         self.euler_rate_mv = Vector3(0., 0., 0.)

@@ -54,15 +54,15 @@ class BebopCircleFlight:
         self.x_list = []
         self.y_list = []
         self.theta_list = []
-        self.d_theta = 2  # angle discretisation
+        self.d_theta = 1  # angle discretisation
 
         # Crontroller rate
-        self.controller_rate = 2
+        self.controller_rate = 1.7
         self.rate = rospy.Rate(self.controller_rate)
 
         # ~Windmill height(?)
         self.windmill_height = 2.16
-        self.back_dist = - 1
+        self.back_dist = - 1.5
         self.angle_delta = math.pi / 180 * 5
         self.windmill_radius = 2 - self.back_dist
 

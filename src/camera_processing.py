@@ -171,8 +171,8 @@ class CameraProcessing:
         print("CameraProcessing.run()")
         rospy.sleep(5)
         normal_found = False
-
-        while not rospy.is_shutdown() and not normal_found  :
+        detect_count = 0
+        while not rospy.is_shutdown() and not normal_found:
 
             # little sleepy boy
             self.rate.sleep()
@@ -190,32 +190,46 @@ class CameraProcessing:
                 self.error_pub.publish(self.avg_theta)
                 continue
 
-            if self.avg_theta < 10e-7:
+            img = self.draw_hough_lines(lines, decoded_image)
 
+            if self.avg_theta < 5e-5:
+                detect_count += 1
+                print("DETECT COUNT {}".format(detect_count))
+
+            if detect_count >= 10:
                 print("CameraProcessing.run() - Flight control - Stop")
                 # Signal to flight control to stop
                 self.fc_msg.y = 0
                 self.fc_pub.publish(self.fc_msg)
-                rospy.sleep(5)  # To stabilize yaw
+                rospy.sleep(4)  # To stabilize yaw
+
+                avg_yaw = 0
+                for i in range(100):
+                    self.get_current_yaw()
+                    #print(self.curr_yaw)
+                    avg_yaw += self.curr_yaw
+                    rospy.sleep(0.01)
+
+                avg_yaw /= 100
+                self.curr_yaw = avg_yaw
 
                 if not self.img_saved:
-                    self.get_current_yaw()
+                    #self.get_current_yaw()
                     self.img_saved = True
                     self.get_normal(decoded_image)
                     self.normal_pub.publish(self.normal)
                     normal_found = True
 
             # print("CameraProcessing.run() - found lines {}".format(lines.shape[0]))
-            img = self.draw_hough_lines(lines, decoded_image)
 
             # Create published image
-            msg = CompressedImage()
-            msg.header.stamp = rospy.Time.now()
-            msg.format = "jpeg"
-            msg.data = np.array(cv2.imencode('.jpg', img)[1]).tostring()
+            #msg = CompressedImage()
+            #msg.header.stamp = rospy.Time.now()
+            #msg.format = "jpeg"
+            #msg.data = np.array(cv2.imencode('.jpg', img)[1]).tostring()
 
             # Publish new image
-            self.image_pub.publish(msg)
+            #self.image_pub.publish(msg)
 
     def get_normal(self, img):
 
@@ -284,16 +298,16 @@ class CameraProcessing:
             theta_temp = abs(theta - math.pi/2)
             self.avg_theta += (theta_temp - math.pi/2)**4
 
-            a = np.cos(theta)
-            b = np.sin(theta)
-            x0 = a*rho
-            y0 = b*rho
-            x1 = int(x0 + 2000*(-b))
-            y1 = int(y0 + 2000*(a))
-            x2 = int(x0 - 2000*(-b))
-            y2 = int(y0 - 2000*(a))
+            #a = np.cos(theta)
+            #b = np.sin(theta)
+            #x0 = a*rho
+            #y0 = b*rho
+            #x1 = int(x0 + 2000*(-b))
+            #y1 = int(y0 + 2000*(a))
+            #x2 = int(x0 - 2000*(-b))
+            #y2 = int(y0 - 2000*(a))
 
-            cv2.line(img, (x1, y1), (x2, y2), (0, 0, 255), 5)
+            #cv2.line(img, (x1, y1), (x2, y2), (0, 0, 255), 5)
 
         self.avg_theta /= len(lines)
         print("Current error: ", self.avg_theta)

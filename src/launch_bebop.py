@@ -25,7 +25,8 @@ class LaunchBebop:
         self.bm = 0.016  # m       --> Moment constant of a motor
         self.l = 0.12905  # m       --> The distance of a motor from a center of mass
         self.gravity = 9.81  # m/s^2   --> Gravity value
-        self.sleep_sec = 0.5    # sleep duration while not getting first measurement
+        self.sleep_sec = 2
+
         self.hover_speed = math.sqrt(4.905 / self.bf / 4)
 
         self.first_measurement = False
@@ -117,8 +118,6 @@ class LaunchBebop:
 
         # Define magic thrust number :-)
         self.magic_number = 0.908
-
-        self.sleep_sec = 2
 
     def setpoint_cb(self, data):
 

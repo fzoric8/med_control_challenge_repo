@@ -155,10 +155,7 @@ class CameraProcessing:
         Run image processing loop.
         """
 
-        counter = 0
-
         # Wait until first image is published
-
         while not self.first_image_captured:
             rospy.sleep(2)
 
@@ -253,7 +250,8 @@ class CameraProcessing:
         self.normal.y = np.sin(windmill_yaw)
 
         print("DRONE YAW: {}".format(self.curr_yaw))
-        print("PIX MID: {}\nPIX TOP: {}\nSIDE: {}\nNORMAL: {}".format(pix_mid, pix_top, side, self.normal))
+        print("PIX MID: {}\nPIX TOP: {}\nSIDE: {}\nNORMAL: {}".format(
+            pix_mid, pix_top, side, self.normal))
 
     def draw_hough_lines(self, lines, img):
         """

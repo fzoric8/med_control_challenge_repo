@@ -5,6 +5,7 @@ import rospy
 import math
 import numpy as np
 import cv2
+from nav_msgs.msg import Odometry
 from sensor_msgs.msg import CompressedImage, LaserScan
 from std_msgs.msg import Float64
 from geometry_msgs.msg import Vector3
@@ -19,6 +20,7 @@ class CameraProcessing:
         """
         Initialize ros publisher, ros subscriber
         """
+        self.normal = Vector3(0., 0., 0.)
 
         # Output image publishers
         self.image_pub = rospy.Publisher(
@@ -44,6 +46,21 @@ class CameraProcessing:
             "bebop/flight_control",
             Vector3,
             queue_size=10)
+
+        # Plane of rotation normal publisher
+        self.normal_pub = rospy.Publisher(
+            "bebop/plane_of_rotation_normal",
+            Vector3,
+            queue_size=10)
+
+        # Odometry subscriber
+        self.odom_subscriber = rospy.Subscriber(
+            "bebop/odometry",
+            Odometry,
+            self.odometry_callback)
+
+        self.img_saved = False
+
         self.fc_msg = Vector3()
         self.fc_msg.x = 1
         self.fc_msg.y = 1
@@ -56,6 +73,67 @@ class CameraProcessing:
         # Image array being processed
         self.img_array = []
         self.avg_theta = 1000
+
+    def odometry_callback(self, data):
+        """Callback function for odometry subscriber"""
+
+        self.x_mv = data.pose.pose.position.x
+        self.y_mv = data.pose.pose.position.y
+        self.z_mv = data.pose.pose.position.z
+
+        self.vx_mv = data.twist.twist.linear.x
+        self.vy_mv = data.twist.twist.linear.y
+        self.vz_mv = data.twist.twist.linear.z
+
+        self.p = data.twist.twist.angular.x
+        self.q = data.twist.twist.angular.y
+        self.r = data.twist.twist.angular.z
+
+        self.qx = data.pose.pose.orientation.x
+        self.qy = data.pose.pose.orientation.y
+        self.qz = data.pose.pose.orientation.z
+        self.qw = data.pose.pose.orientation.w
+
+    def quaternion2euler(self, qx, qy, qz, qw):
+        """
+        Calculate roll, pitch and yaw angles/rates with quaternions.
+
+        :returns:
+            This function returns following information:
+                pitch, roll, yaw,
+                pitch_rate, roll_rate, yaw_rate
+        """
+        # conversion quaternion to euler (yaw - pitch - roll)
+        roll = math.atan2(2 * (qw * qx + qy * qz), qw * qw
+                          - qx * qx - qy * qy + qz * qz)
+        pitch = math.asin(2 * (qw * qy - qx * qz))
+        yaw = math.atan2(2 * (qw * qz + qx * qy), qw * qw
+                         + qx * qx - qy * qy - qz * qz)
+
+        # gyro measurements (p,q,r)
+        p = self.p
+        q = self.q
+        r = self.r
+
+        sx = math.sin(roll)  # sin(roll)
+        cx = math.cos(roll)  # cos(roll)
+        cy = math.cos(pitch)  # cos(pitch)
+        ty = math.tan(pitch)  # cos(pitch)
+
+        # conversion gyro measurements to roll_rate, pitch_rate, yaw_rate
+        roll_rate = p + sx * ty * q + cx * ty * r
+        pitch_rate = cx * q - sx * r
+        yaw_rate = sx / cy * q + cx / cy * r
+
+        return roll, pitch, yaw, roll_rate, pitch_rate, yaw_rate
+
+    def get_current_yaw(self):
+        """
+        Get current bebop position
+        """
+        # Get current position
+        _, _, self.curr_yaw, _, _, _ = self.quaternion2euler(
+            self.qx, self.qy, self.qz, self.qw)
 
     def laser_cb(self, laser_msg):
         self.range = laser_msg.ranges[0]
@@ -84,10 +162,11 @@ class CameraProcessing:
         while not self.first_image_captured:
             rospy.sleep(2)
 
-        print("CameraProcessing.run() - Flight control - Start in 5 seconds")
-        rospy.sleep(5)
+        print("CameraProcessing.run() - Flight control - Start")
         self.fc_pub.publish(self.fc_msg)
         print("CameraProcessing.run()")
+        rospy.sleep(5)
+
         while not rospy.is_shutdown():
 
             # little sleepy boy
@@ -112,6 +191,11 @@ class CameraProcessing:
                 # Signal to flight control to stop
                 self.fc_msg.y = 0
                 self.fc_pub.publish(self.fc_msg)
+                if not self.img_saved:
+                    self.get_current_yaw()
+                    self.img_saved = True
+                    self.get_normal(decoded_image)
+                    self.normal_pub.publish(self.normal)
 
             # print("CameraProcessing.run() - found lines {}".format(lines.shape[0]))
             img = self.draw_hough_lines(lines, decoded_image)
@@ -124,6 +208,52 @@ class CameraProcessing:
 
             # Publish new image
             self.image_pub.publish(msg)
+
+    def get_normal(self, img):
+
+        pix_top = 0
+        pix_mid = 0
+        side = ''
+        windmill_yaw_correction = math.pi / 2
+
+        # changing RGB to BW
+        # Adding median blur to photo
+        blur = cv2.medianBlur(img, 9)
+        gray = cv2.cvtColor(blur, cv2.COLOR_BGR2GRAY)
+
+        # Applying threshold to images
+        th = cv2.bitwise_not(cv2.adaptiveThreshold(
+            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2))
+
+        # searching for horizon y pixel and top windmill x pixel
+        for i in range(200, 800):
+            if not pix_top:
+                if th[i, :].any():
+                    for j in range(500, 1500):
+                        if th[i, j]:
+                            pix_top = j
+
+            if th[i, 0:30].any():
+                pix_mid = i - 30
+                break
+
+        for i in range(pix_top - 200, pix_top):
+            i_2 = 2 * pix_top - i
+            if th[(pix_mid - 100):pix_mid, i].any():
+                windmill_yaw_correction *= -1
+                side = 'r'
+                break
+            elif th[(pix_mid - 100):pix_mid, i_2].any():
+                side = 'l'
+                break
+
+        windmill_yaw = self.curr_yaw + windmill_yaw_correction
+
+        self.normal.x = np.cos(windmill_yaw)
+        self.normal.y = np.sin(windmill_yaw)
+
+        print("DRONE YAW: {}".format(self.curr_yaw))
+        print("PIX MID: {}\nPIX TOP: {}\nSIDE: {}\nNORMAL: {}".format(pix_mid, pix_top, side, self.normal))
 
     def draw_hough_lines(self, lines, img):
         """

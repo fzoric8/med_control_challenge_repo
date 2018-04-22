@@ -8,7 +8,7 @@
     <!-- Add trajectory control -->
 	<node
 		pkg="crobots_med_control"
-		type="bebop_trajectory.py"
+		type="bebop_trajectory_pid.py"
 		name="bebop_trajectory"
 		output="screen">
 	</node>
@@ -21,6 +21,7 @@
 		output="screen">
 
 		<param name="verbose" value="True" type="bool" />
+		<param name="wind" value="False" type="bool" />
 	</node>
 
 </launch>

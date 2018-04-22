@@ -113,7 +113,7 @@ class CameraProcessing:
                 self.fc_msg.y = 0
                 self.fc_pub.publish(self.fc_msg)
 
-            #print("CameraProcessing.run() - found lines {}".format(lines.shape[0]))
+            # print("CameraProcessing.run() - found lines {}".format(lines.shape[0]))
             img = self.draw_hough_lines(lines, decoded_image)
 
             # Create published image

@@ -16,15 +16,6 @@ class LaunchBebop:
     def __init__(self):
         """Constructor initializes all needed variables"""
 
-        self.mass = 0.5         # kg --> mass of the quadcopter
-        self.Ixx = 0.00389      # kg m^2  --> Quadrotor moment of inertia in body x direction
-        self.Iyy = 0.00389      # kg m^2  --> Quadrotor moment of inertia in body y direction
-        self.Izz = 0.0078       # kg m^2  --> Quadrotor moment of inertia in body z direction
-        self.Tm = 0.0125        # s       --> Time constant of a motor
-        self.bf = 8.548e-6      # kg m    --> Thrust constant of a motor
-        self.bm = 0.016         # m       --> Moment constant of a motor
-        self.l = 0.12905        # m       --> The distance of a motor from a center of mass
-        self.gravity = 9.81     # m/s^2   --> Gravity value
         self.sleep_sec = 0.5    # sleep duration while not getting first measurement
         self.hover_speed = math.sqrt(4.905 / self.bf / 4)
 
@@ -62,11 +53,6 @@ class LaunchBebop:
             '/gazebo/command/motor_speed',
             Actuators,
             queue_size=10)
-        self.trajectory_subscriber = rospy.Subscriber(
-            "/bebop/trajectory_reference",
-            MultiDOFJointTrajectory,
-            self.trajectory_cb)
-
         self.actuator_msg = Actuators()
         
         # define vector for measured and setopint values
@@ -123,10 +109,7 @@ class LaunchBebop:
         # Define magic thrust number :-)
         self.magic_number = 0.908
 
-        # Initialize trajectory information
-        self.trajectory_index = 0
-        self.trajectory_point_count = -1
-        self.trajectory_points = []
+        self.sleep_sec = 2
 
     def setpoint_cb(self, data):
 
@@ -164,11 +147,6 @@ class LaunchBebop:
         self.x_gt_mv = data.pose.pose.position.x
         self.y_gt_mv = data.pose.pose.position.y
         self.z_gt_mv = data.pose.pose.position.z
-
-    def trajectory_cb(self, data):
-        self.trajectory_received = True
-        self.trajectory_point_count = len(data.points)
-        self.trajectory_points = data.points
 
     def convert_to_euler(self, qx, qy, qz, qw):
         """Calculate roll, pitch and yaw angles/rates with quaternions"""

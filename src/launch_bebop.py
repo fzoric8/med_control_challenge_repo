@@ -90,8 +90,8 @@ class LaunchBebop:
         if self.wind_controller:
             # TODO: Tune paramters
             self.pid_z = PID(4, 0.05, 0.1, 10, -10)
-            self.pid_x = PID(0.7, 0.0001, 0.1, 0.4, -0.4)
-            self.pid_y = PID(0.7, 0.0001, 0.1, 0.4, -0.4)
+            self.pid_x = PID(0.5, 0.06, 0.03, 0.35, -0.35)
+            self.pid_y = PID(0.5, 0.06, 0.03, 0.35, -0.35)
         else:
             self.pid_z = PID(4, 0.05, 0.1, 10, -10)
             self.pid_x = PID(0.4, 0.001, 0.1, 0.2, -0.2)

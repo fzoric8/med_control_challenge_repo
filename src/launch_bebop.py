@@ -97,14 +97,16 @@ class LaunchBebop:
         # Position loop
         if self.wind_controller:
             # TODO: Tune paramters
+            print("LaunchBebop.init() - Wind parameters active")
             self.pid_z = PID(4, 0.05, 0.1, 10, -10)
             self.pid_x = PID(0.5, 0.06, 0.03, 0.35, -0.35)
             self.pid_y = PID(0.5, 0.06, 0.03, 0.35, -0.35)
 
         else:
+            print("LaunchBebop.init() - Non Wind parameters active")
             self.pid_z = PID(4, 0.05, 0.1, 10, -10)
-            self.pid_x = PID(0.4, 0.001, 0.1, 0.2, -0.2)
-            self.pid_y = PID(0.4, 0.001, 0.1, 0.2, -0.2)
+            self.pid_x = PID(0.25, 0.05, 0.055, 0.18, -0.18)
+            self.pid_y = PID(0.25, 0.05, 0.055, 0.18, -0.18)
 
         # outer_loops
         self.pitch_PID = PID(4.44309, 0.1, 0.2, 100, -100)

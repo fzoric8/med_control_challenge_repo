@@ -54,10 +54,10 @@ class BebopCircleFlight:
         self.x_list = []
         self.y_list = []
         self.theta_list = []
-        self.d_theta = 3  # angle discretisation
+        self.d_theta = 2  # angle discretisation
 
         # Crontroller rate
-        self.controller_rate = 1
+        self.controller_rate = 2
         self.rate = rospy.Rate(self.controller_rate)
 
         # ~Windmill height(?)
@@ -216,7 +216,7 @@ class BebopCircleFlight:
         self.pos_ref_pub.publish(self.pos_ref_msg)
 
         print("BebopCircleFlight() - takeoff completed.")
-        rospy.sleep(3 * self.sleep_sec)
+        rospy.sleep(self.sleep_sec)
 
     def fc_callback(self, data):
         self.forward = data.x

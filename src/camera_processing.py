@@ -59,6 +59,10 @@ class CameraProcessing:
             Odometry,
             self.odometry_callback)
 
+        self.angle_sub = rospy.Subscriber(
+            "bebop/angle_ref",
+            Vector3,
+            self.angle_cb)
         self.img_saved = False
 
         self.fc_msg = Vector3()
@@ -73,6 +77,9 @@ class CameraProcessing:
         # Image array being processed
         self.img_array = []
         self.avg_theta = 1000
+
+    def angle_cb(self, data):
+        self.ref_yaw = data.z
 
     def odometry_callback(self, data):
         """Callback function for odometry subscriber"""
@@ -163,8 +170,9 @@ class CameraProcessing:
         self.fc_pub.publish(self.fc_msg)
         print("CameraProcessing.run()")
         rospy.sleep(5)
+        normal_found = False
 
-        while not rospy.is_shutdown():
+        while not rospy.is_shutdown() and not normal_found  :
 
             # little sleepy boy
             self.rate.sleep()
@@ -182,17 +190,20 @@ class CameraProcessing:
                 self.error_pub.publish(self.avg_theta)
                 continue
 
-            if self.avg_theta < 10e-6:
+            if self.avg_theta < 10e-7:
 
                 print("CameraProcessing.run() - Flight control - Stop")
                 # Signal to flight control to stop
                 self.fc_msg.y = 0
                 self.fc_pub.publish(self.fc_msg)
+                rospy.sleep(5)  # To stabilize yaw
+
                 if not self.img_saved:
                     self.get_current_yaw()
                     self.img_saved = True
                     self.get_normal(decoded_image)
                     self.normal_pub.publish(self.normal)
+                    normal_found = True
 
             # print("CameraProcessing.run() - found lines {}".format(lines.shape[0]))
             img = self.draw_hough_lines(lines, decoded_image)

@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+
+<launch>
+
+    <!-- Include task2 launch file -->
+	<include file="$(find med_uav_description)/launch/task3_world.launch" />
+
+    <!-- Add position control -->
+	<node
+		pkg="crobots_med_control"
+		type="launch_bebop.py"
+		name="bebop_launch"
+		output="screen">
+
+		<param name="verbose" value="False" type="bool" />
+		<param name="wind" value="False" type="bool"	/>
+
+	</node>
+
+	<!-- Add image processing -->
+	<node
+		pkg="crobots_med_control"
+		type="camera_processing.py"
+		name="camera_processing"
+		output="screen">
+	</node>
+
+	<!-- Circle flight -->
+	<node
+		pkg="crobots_med_control"
+		type="circle_flight.py"
+		name="circle_flight"
+		output="screen">
+	</node>
+
+</launch>

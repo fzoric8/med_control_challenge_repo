@@ -28,7 +28,8 @@ class LaunchBebop:
         self.hover_speed = math.sqrt(4.905 / self.bf / 4)
 
         self.first_measurement = False
-        self.controller_info = False
+        self.controller_info = rospy.get_param("~verbose", False)
+        self.wind_controller = rospy.get_param("~wind", True)
 
         self.odom_subscriber = rospy.Subscriber(
             "bebop/odometry",
@@ -82,17 +83,23 @@ class LaunchBebop:
         self.vz_mv = 0          # vz velocity measured value
 
         # Height controller
-        self.pid_z = PID(4, 0.05, 0.1, 10, -10)
         self.pid_vz = PID(195.8, 0, 1.958, 300, -300)
 
         # Position loop
-        self.pid_x = PID(1, 0.03, 0.5, 0.2, -0.2)
-        self.pid_y = PID(1, 0.03, 0.5, 0.2, -0.2)
+        if self.wind_controller:
+            # TODO: Tune paramters
+            self.pid_z = PID(4, 0.05, 0.1, 10, -10)
+            self.pid_x = PID(0.7, 0.0001, 0.1, 0.4, -0.4)
+            self.pid_y = PID(0.7, 0.0001, 0.1, 0.4, -0.4)
+        else:
+            self.pid_z = PID(4, 0.05, 0.1, 10, -10)
+            self.pid_x = PID(0.4, 0.001, 0.1, 0.2, -0.2)
+            self.pid_y = PID(0.4, 0.001, 0.1, 0.2, -0.2)
 
         # outer_loops
         self.pitch_PID = PID(4.44309, 0.1, 0.2, 100, -100)
         self.roll_PID = PID(4.44309, 0.1, 0.2, 100, -100)
-        self.yaw_PID = PID(10, 0.004, 0.2, 150, -150)
+        self.yaw_PID = PID(20, 1, 0.0, 150, -150)
 
         # inner_loops
         self.pitch_rate_PID = PID(16.61, 0, 0, 100, -100)
@@ -249,13 +256,15 @@ class LaunchBebop:
             # Print out controller information
             if self.controller_info:
                 print(dt)
-                print("Comparison x:{}\nx_m:{}\ny:{}\ny_m:{}\nz:{}\nz_m{}".format(
+                print("Comparison x:{}\nx_m:{}\ny:{}\ny_m:{}\nz:{}\nz_m{}\nyaw:{}\nyaw_m:{}".format(
                     self.pose_sp.x,
                     self.x_mv,
                     self.pose_sp.y,
                     self.y_mv,
                     self.pose_sp.z,
-                    self.z_mv))
+                    self.z_mv,
+                    self.euler_sp.z,
+                    self.euler_mv.z))
                 print("Motor speeds are {}".format(self.actuator_msg.angular_velocities))
                 print("Current quadcopter height is: {}".format(self.z_mv))
                 print("Hover speed is: {}\n"
@@ -286,7 +295,6 @@ if __name__ == "__main__":
     rospy.init_node('bebop_launch', anonymous=True)
     try:
         launch_bebop = LaunchBebop()
-        launch_bebop.controller_info = rospy.get_param("~verbose", False)
         launch_bebop.run()
     except rospy.ROSInterruptException:
         pass

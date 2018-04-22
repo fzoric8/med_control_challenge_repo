@@ -16,6 +16,15 @@ class LaunchBebop:
     def __init__(self):
         """Constructor initializes all needed variables"""
 
+        self.mass = 0.5  # kg --> mass of the quadcopter
+        self.Ix = 0.00389  # kg m^2  --> Quadrotor moment of inertia in body x direction
+        self.Iy = 0.00389  # kg m^2  --> Quadrotor moment of inertia in body y direction
+        self.Iz = 0.0078  # kg m^2  --> Quadrotor moment of inertia in body z direction
+        self.Tm = 0.0125  # s       --> Time constant of a motor
+        self.bf = 8.548e-6  # kg m    --> Thrust constant of a motor
+        self.bm = 0.016  # m       --> Moment constant of a motor
+        self.l = 0.12905  # m       --> The distance of a motor from a center of mass
+        self.gravity = 9.81  # m/s^2   --> Gravity value
         self.sleep_sec = 0.5    # sleep duration while not getting first measurement
         self.hover_speed = math.sqrt(4.905 / self.bf / 4)
 

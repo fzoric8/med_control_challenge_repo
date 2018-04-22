@@ -69,6 +69,11 @@ class BebopTrajectory:
             "/bebop/angle_ref",
             Vector3,
             queue_size=10)
+        self.linvel_ref_pub = rospy.Publisher(
+            "/bebop/lin_vel_pub",
+            Vector3,
+            queue_size=10
+        )
 
         self.actuator_msg = Actuators()
 
@@ -87,7 +92,7 @@ class BebopTrajectory:
 
         # Controller rate
         # Trajectory points are being given with a frequency of 100Hz
-        self.controller_rate = 100
+        self.controller_rate = 50
         self.rate = rospy.Rate(self.controller_rate)
         self.t_old = 0
 
@@ -202,18 +207,21 @@ class BebopTrajectory:
             if not self.trajectory_received:
                 pose = Vector3(0., 0., 1.0)
                 angle = Vector3(0., 0., 0.)
+                vel = Vector3(0., 0., 0.)
 
             else:
                 current_point = self.trajectory_points[self.trajectory_index]
                 pose = current_point.transforms[0].translation
+                vel = current_point.velocities[0].linear
                 angle_q = current_point.transforms[0].rotation
                 angle.x, angle.y, angle.z, _, _, _ = self.quaternion2euler(
                     angle_q.x, angle_q.y, angle_q.z, angle_q.w)
 
                 # Increase trajectory point index, check if finished
-                self.trajectory_index += 3
+                self.trajectory_index += 2
                 print("BebopTrajectory.run() - point {} / {}\ndt: {}"
                       .format(self.trajectory_index, self.trajectory_point_count, dt))
+                print("BebopTrajectory.run() - velocity at point {}".format(vel))
                 if self.trajectory_index >= self.trajectory_point_count:
                     print("BebopTrajectory.run() -"
                           "Trajectory completed.")
@@ -227,11 +235,19 @@ class BebopTrajectory:
             point_position.z = pose.z
             self.pos_ref_pub.publish(point_position)
 
+            # Publish trajectory velocity
+            trajectory_vel = Vector3()
+            trajectory_vel.x = vel.x
+            trajectory_vel.y = vel.y
+            trajectory_vel.z = vel.z
+            self.linvel_ref_pub.publish(trajectory_vel)
+
             quick_hack_msg2 = Vector3()
             quick_hack_msg2.x = 0
             quick_hack_msg2.y = 0
             quick_hack_msg2.z = angle.z
             self.ang_ref_pub.publish(quick_hack_msg2)
+
 
             # Print out controller information
             if self.controller_info:

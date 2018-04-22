@@ -16,15 +16,15 @@ class LaunchBebop:
     def __init__(self):
         """Constructor initializes all needed variables"""
 
-        self.mass = 0.5  # kg --> mass of the quadcopter
-        self.Ix = 0.00389  # kg m^2  --> Quadrotor moment of inertia in body x direction
-        self.Iy = 0.00389  # kg m^2  --> Quadrotor moment of inertia in body y direction
-        self.Iz = 0.0078  # kg m^2  --> Quadrotor moment of inertia in body z direction
-        self.Tm = 0.0125  # s       --> Time constant of a motor
-        self.bf = 8.548e-6  # kg m    --> Thrust constant of a motor
-        self.bm = 0.016  # m       --> Moment constant of a motor
-        self.l = 0.12905  # m       --> The distance of a motor from a center of mass
-        self.gravity = 9.81  # m/s^2   --> Gravity value
+        self.mass = 0.5  # kg           --> mass of the quadcopter
+        self.Ix = 0.00389  # kg m^2     --> Quadrotor moment of inertia in body x direction
+        self.Iy = 0.00389  # kg m^2     --> Quadrotor moment of inertia in body y direction
+        self.Iz = 0.0078  # kg m^2      --> Quadrotor moment of inertia in body z direction
+        self.Tm = 0.0125  # s           --> Time constant of a motor
+        self.bf = 8.548e-6  # kg m      --> Thrust constant of a motor
+        self.bm = 0.016  # m            --> Moment constant of a motor
+        self.l = 0.12905  # m           --> The distance of a motor from a center of mass
+        self.gravity = 9.81  # m/s^2    --> Gravity value
         self.sleep_sec = 2
 
         self.hover_speed = math.sqrt(4.905 / self.bf / 4)
@@ -49,6 +49,10 @@ class LaunchBebop:
             "bebop/angle_ref",
             Vector3,
             self.angle_cb)
+        self.velocity_subscriber = rospy.Subscriber(
+            "bebop/lin_vel_pub",
+            Vector3,
+            self.linvel_cb)
 
         # initialize publishers
         self.motor_pub = rospy.Publisher(
@@ -57,6 +61,10 @@ class LaunchBebop:
             queue_size=10)
         self.error_pub = rospy.Publisher(
             '/bebop/pos_error',
+            Float64,
+            queue_size=10)
+        self.error_vel_pub = rospy.Publisher(
+            '/bebop/vel_error',
             Float64,
             queue_size=10)
         self.motor_pub = rospy.Publisher(
@@ -92,6 +100,7 @@ class LaunchBebop:
             self.pid_z = PID(4, 0.05, 0.1, 10, -10)
             self.pid_x = PID(0.5, 0.06, 0.03, 0.35, -0.35)
             self.pid_y = PID(0.5, 0.06, 0.03, 0.35, -0.35)
+
         else:
             self.pid_z = PID(4, 0.05, 0.1, 10, -10)
             self.pid_x = PID(0.4, 0.001, 0.1, 0.2, -0.2)
@@ -119,11 +128,22 @@ class LaunchBebop:
         # Define magic thrust number :-)
         self.magic_number = 0.908
 
+        # Velocity refs at start
+        self.linvel_x = 0
+        self.linvel_y = 0
+        self.linvel_z = 0
+
     def setpoint_cb(self, data):
 
         self.pose_sp.x = data.x
         self.pose_sp.y = data.y
         self.pose_sp.z = data.z
+
+    def linvel_cb(self, data):
+
+        self.linvel_x = data.x
+        self.linvel_y = data.y
+        self.linvel_z = data.z
 
     def angle_cb(self, data):
 
@@ -244,6 +264,12 @@ class LaunchBebop:
                               (self.pose_sp.y - self.y_gt_mv)**2 +
                               (self.pose_sp.z - self.z_gt_mv)**2)
             self.error_pub.publish(error)
+
+            # Calculate velocity error
+            error_vel = math.sqrt((self.linvel_x - self.vx_mv)**2 +
+                                  (self.linvel_y - self.vy_mv)**2 +
+                                  (self.linvel_z - self.vz_mv)**2)
+            self.error_vel_pub.publish(error_vel)
 
             # angular velocity of certain rotor
             motor_speed1 = self.hover_speed + u_height - u_roll - u_pitch - u_yaw

@@ -205,7 +205,7 @@ class CameraProcessing:
                 detect_count += 1
                 print("DETECT COUNT {}".format(detect_count))
 
-            if detect_count >= 5:
+            if detect_count >= 7:
                 print("CameraProcessing.run() - Flight control - Stop")
                 # Signal to flight control to stop
                 self.fc_msg.y = 0
@@ -213,13 +213,13 @@ class CameraProcessing:
                 rospy.sleep(5)  # To stabilize yaw
 
                 avg_yaw = 0
-                for i in range(200):
+                for i in range(20):
                     self.get_current_yaw()
                     #print(self.curr_yaw)
                     avg_yaw += self.curr_yaw
                     rospy.sleep(0.01)
 
-                avg_yaw /= 200
+                avg_yaw /= 20
                 self.curr_yaw = avg_yaw
                 r_count, l_count = 0, 0
                 voting_count = 3

@@ -192,17 +192,20 @@ class CameraProcessing:
 
             img = self.draw_hough_lines(lines, decoded_image)
 
-            if self.avg_theta > 1e-1:
-                self.fc_msg.z = 0
+            if self.avg_theta > 0.08:
+                self.fc_msg.z = 0.0
+                detect_count = 0
+                #print("Fast")
             else:
                 self.fc_msg.z = 0.5
+                #print("Slow")
             self.fc_pub.publish(self.fc_msg)
 
             if self.avg_theta < 1e-6:
                 detect_count += 1
                 print("DETECT COUNT {}".format(detect_count))
 
-            if detect_count >= 8:
+            if detect_count >= 20:
                 print("CameraProcessing.run() - Flight control - Stop")
                 # Signal to flight control to stop
                 self.fc_msg.y = 0
@@ -210,13 +213,13 @@ class CameraProcessing:
                 rospy.sleep(5)  # To stabilize yaw
 
                 avg_yaw = 0
-                for i in range(100):
+                for i in range(200):
                     self.get_current_yaw()
                     #print(self.curr_yaw)
                     avg_yaw += self.curr_yaw
                     rospy.sleep(0.01)
 
-                avg_yaw /= 100
+                avg_yaw /= 200
                 self.curr_yaw = avg_yaw
                 r_count, l_count = 0, 0
                 voting_count = 3
@@ -337,7 +340,7 @@ class CameraProcessing:
             #cv2.line(img, (x1, y1), (x2, y2), (0, 0, 255), 5)
 
         self.avg_theta /= len(lines)
-        print("Current error: ", self.avg_theta)
+        #print("Current error: ", self.avg_theta)
 
         self.error_pub.publish(self.avg_theta)
 

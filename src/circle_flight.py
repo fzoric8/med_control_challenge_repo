@@ -57,7 +57,7 @@ class BebopCircleFlight:
         self.d_theta = 1  # angle discretisation
 
         # Crontroller rate
-        self.controller_rate = 5
+        self.controller_rate = 10
         self.rate = rospy.Rate(self.controller_rate)
 
         # ~Windmill height(?)
@@ -188,6 +188,7 @@ class BebopCircleFlight:
 
             # Publish angle
             self.ang_ref_pub.publish(self.ang_ref_msg)
+            print(self.fc_sleep)
             rospy.sleep(self.fc_sleep)
 
             self.i += int(self.forward)

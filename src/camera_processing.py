@@ -205,7 +205,7 @@ class CameraProcessing:
                 detect_count += 1
                 print("DETECT COUNT {}".format(detect_count))
 
-            if detect_count >= 20:
+            if detect_count >= 5:
                 print("CameraProcessing.run() - Flight control - Stop")
                 # Signal to flight control to stop
                 self.fc_msg.y = 0

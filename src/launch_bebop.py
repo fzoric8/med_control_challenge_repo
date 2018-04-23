@@ -245,10 +245,11 @@ class LaunchBebop:
             roll_sp = - self.pid_y.compute(self.pose_sp.y, self.y_mv, dt)
 
             # PITCH AND ROLL YAW ADJUSTMENT
-            roll_sp = math.cos(self.euler_mv.z) * roll_sp + \
+            roll_sp_2 = math.cos(self.euler_mv.z) * roll_sp + \
                       math.sin(self.euler_mv.z) * pitch_sp
-            pitch_sp = math.cos(self.euler_mv.z) * pitch_sp + \
+            pitch_sp = math.cos(self.euler_mv.z) * pitch_sp - \
                        math.sin(self.euler_mv.z) * roll_sp
+            roll_sp = roll_sp_2
 
             # PITCH CONTROL INNER LOOP
             pitch_rate_sp = self.pitch_PID.compute(pitch_sp, self.euler_mv.y, dt)

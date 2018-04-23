@@ -62,7 +62,7 @@ class BebopCircleFlight:
 
         # ~Windmill height(?)
         self.windmill_height = 2.16
-        self.back_dist = - 2
+        self.back_dist = - 1.5
         self.angle_delta = math.pi / 180 * 5
         self.windmill_radius = 2 - self.back_dist
 

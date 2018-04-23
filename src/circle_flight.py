@@ -57,7 +57,7 @@ class BebopCircleFlight:
         self.d_theta = 1  # angle discretisation
 
         # Crontroller rate
-        self.controller_rate = 1.7
+        self.controller_rate = 5
         self.rate = rospy.Rate(self.controller_rate)
 
         # ~Windmill height(?)
@@ -65,6 +65,8 @@ class BebopCircleFlight:
         self.back_dist = - 2
         self.angle_delta = math.pi / 180 * 5
         self.windmill_radius = 2 - self.back_dist
+
+        self.fc_sleep = 0
 
     def odometry_callback(self, data):
         """Callback function for odometry subscriber"""
@@ -186,7 +188,7 @@ class BebopCircleFlight:
 
             # Publish angle
             self.ang_ref_pub.publish(self.ang_ref_msg)
-            rospy.sleep(0.4)
+            rospy.sleep(self.fc_sleep)
 
             self.i += int(self.forward)
             print(self.i)
@@ -221,7 +223,7 @@ class BebopCircleFlight:
     def fc_callback(self, data):
         self.forward = data.x
         self.start = data.y
-
+        self.fc_sleep = data.z
 
 if __name__ == '__main__':
     rospy.init_node('circle_flight', anonymous=True)

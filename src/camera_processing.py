@@ -192,6 +192,12 @@ class CameraProcessing:
 
             img = self.draw_hough_lines(lines, decoded_image)
 
+            if self.avg_theta > 1e-1:
+                self.fc_msg.z = 0
+            else:
+                self.fc_msg.z = 0.5
+            self.fc_pub.publish(self.fc_msg)
+
             if self.avg_theta < 1e-6:
                 detect_count += 1
                 print("DETECT COUNT {}".format(detect_count))
@@ -201,7 +207,7 @@ class CameraProcessing:
                 # Signal to flight control to stop
                 self.fc_msg.y = 0
                 self.fc_pub.publish(self.fc_msg)
-                rospy.sleep(4)  # To stabilize yaw
+                rospy.sleep(5)  # To stabilize yaw
 
                 avg_yaw = 0
                 for i in range(100):

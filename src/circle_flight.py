@@ -62,7 +62,7 @@ class BebopCircleFlight:
 
         # ~Windmill height(?)
         self.windmill_height = 2.16
-        self.back_dist = - 1.5
+        self.back_dist = - 2
         self.angle_delta = math.pi / 180 * 5
         self.windmill_radius = 2 - self.back_dist
 
@@ -186,7 +186,7 @@ class BebopCircleFlight:
 
             # Publish angle
             self.ang_ref_pub.publish(self.ang_ref_msg)
-            rospy.sleep(0.1)
+            rospy.sleep(0.4)
 
             self.i += int(self.forward)
             print(self.i)

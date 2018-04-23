@@ -192,11 +192,11 @@ class CameraProcessing:
 
             img = self.draw_hough_lines(lines, decoded_image)
 
-            if self.avg_theta < 5e-5:
+            if self.avg_theta < 1e-6:
                 detect_count += 1
                 print("DETECT COUNT {}".format(detect_count))
 
-            if detect_count >= 10:
+            if detect_count >= 8:
                 print("CameraProcessing.run() - Flight control - Stop")
                 # Signal to flight control to stop
                 self.fc_msg.y = 0
@@ -212,11 +212,27 @@ class CameraProcessing:
 
                 avg_yaw /= 100
                 self.curr_yaw = avg_yaw
-
+                r_count, l_count = 0, 0
+                voting_count = 3
                 if not self.img_saved:
                     #self.get_current_yaw()
                     self.img_saved = True
-                    self.get_normal(decoded_image)
+                    for i in range(voting_count):
+                        # capture different picture for voting process (wrong blade position misperception)
+                        decoded_image = cv2.imdecode(self.img_array, cv2.COLOR_BGR2GRAY)
+                        edges = cv2.Canny(decoded_image, 130, 200, apertureSize=3)
+                        lines = cv2.HoughLines(edges, 2, np.pi / 180, 200)
+                        img = self.draw_hough_lines(lines, decoded_image)
+                        side = self.get_normal(decoded_image)
+                        if side == "r":
+                            r_count +=1
+                        else:
+                            l_count +=1
+                    if r_count > l_count:
+                        self.calculate_normal("r")
+                    else:
+                        self.calculate_normal("l")
+                    print("Side: {}\nNormal: {}\n".format(side, self.normal))
                     self.normal_pub.publish(self.normal)
                     normal_found = True
 
@@ -236,7 +252,6 @@ class CameraProcessing:
         pix_top = 0
         pix_mid = 0
         side = ''
-        windmill_yaw_correction = math.pi / 2
 
         # changing RGB to BW
         # Adding median blur to photo
@@ -262,21 +277,27 @@ class CameraProcessing:
         for i in range(pix_top - 200, pix_top):
             i_2 = 2 * pix_top - i
             if th[(pix_mid - 100):pix_mid, i].any():
-                windmill_yaw_correction *= -1
                 side = 'r'
                 break
             elif th[(pix_mid - 100):pix_mid, i_2].any():
                 side = 'l'
                 break
+        #print("PIX MID: {}\nPIX TOP: {}\nSIDE: {}\nNORMAL: {}".format(
+            #pix_mid, pix_top, side, self.normal))
+
+        return side
+
+    def calculate_normal(self, side):
+
+        windmill_yaw_correction = math.pi/2
+        if side == "r":
+            windmill_yaw_correction *= -1
 
         windmill_yaw = self.curr_yaw + windmill_yaw_correction
-
         self.normal.x = np.cos(windmill_yaw)
         self.normal.y = np.sin(windmill_yaw)
 
         print("DRONE YAW: {}".format(self.curr_yaw))
-        print("PIX MID: {}\nPIX TOP: {}\nSIDE: {}\nNORMAL: {}".format(
-            pix_mid, pix_top, side, self.normal))
 
     def draw_hough_lines(self, lines, img):
         """

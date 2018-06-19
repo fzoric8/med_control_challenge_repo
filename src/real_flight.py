@@ -32,14 +32,25 @@ class RealFlight:
             self.vel_cb)
 
         self.pose_subscriber = rospy.Subscriber(
-            "bebop/pos_ref",
+            "/bebop/pos_ref",
             Vector3,
             self.setpoint_cb)
             
         self.angle_subscriber = rospy.Subscriber(
-            "bebop/angle_ref",
+            "/bebop/angle_ref",
             Vector3,
             self.angle_cb)
+
+        self.pose_pub = rospy.Publisher(
+            "/bebop/pose_set",
+            Vector3,
+            queue_size=10)
+
+        self.rms_pub = rospy.Publisher(
+            "/bebop/rms",
+            Float64,
+            queue_size=10
+        )
             
         self.vel_publisher = rospy.Publisher(
             '/bebop/cmd_vel',
@@ -49,24 +60,40 @@ class RealFlight:
         self.twist_msg = Twist()
         
         self.sleep_sec = 2
-        self.first_measurement = False
+        self.first_measurement1 = False
+        self.first_measurement2 = False
+        self.controller_rate = 50
+        self.rate = rospy.Rate(self.controller_rate)
+
+        self.euler_mv = Vector3(0., 0., 0.)
+        self.euler_sp = Vector3(0., 0., 0.)
+        self.euler_rate_mv = Vector3(0., 0., 0.)
+        self.pose_sp = Vector3(0., 0., 1.)
+        self.qx, self.qy, self.qz, self.qw = 0., 0., 0., 0.
+        self.p, self.q, self.r, = 0., 0., 0.
+        self.x_mv, self.y_mv, self.z_mv = 0., 0., 0.
+
         
         # Pre-filter constants
         self.filt_const_x = 0.5
         self.filt_const_y = 0.5
         self.filt_const_z = 0.1
+
+        self.x_filt_sp = 0.
+        self.y_filt_sp = 0.
+        self.z_filt_sp = 0.
         
         self.pid_z = PID(4, 0.05, 0.1, MAX_VZ, - MAX_VZ)
-        self.pid_x = PID(0.5, 0.06, 0.03, MAX_TILT, - MAX_TILT)
-        self.pid_y = PID(0.5, 0.06, 0.03, MAX_TILT, - MAX_TILT)
-        self.yaw_PID = PID(10, 0, 0.0, MAX_ROTV, - MAX_ROTV)
+        self.pid_x = PID(0.25, 0.0, 0.1, MAX_TILT, - MAX_TILT)
+        self.pid_y = PID(0.25, 0.0, 0.1, MAX_TILT, - MAX_TILT)
+        self.yaw_PID = PID(1, 0, 0.0, MAX_ROTV, - MAX_ROTV)
 
         self.RMS = 0
         self.counter = 0
        
     def pose_cb(self, data):
         """PoseStamped msg"""
-        self.first_measurement = True
+        self.first_measurement1 = True
 
         self.x_mv = data.pose.position.x
         self.y_mv = data.pose.position.y
@@ -79,6 +106,8 @@ class RealFlight:
 
     def vel_cb(self, data):
         """TwistStamped msg"""
+        self.first_measurement2 = True
+
         self.vx_mv = data.twist.linear.x
         self.vy_mv = data.twist.linear.y
         self.vz_mv = data.twist.linear.z
@@ -116,9 +145,9 @@ class RealFlight:
     def run(self):
         """ Run ROS node - computes PID algorithms for z and vz control """
 
-        while not self.first_measurement:
-            print("LaunchBebop.run() - Waiting for first measurement.")
-            rospy.sleep(self.sleep_sec)
+        #while not self.first_measurement1 and not self.first_measurement2:
+            #print("LaunchBebop.run() - Waiting for first measurement.")
+            #rospy.sleep(self.sleep_sec)
 
         print("LaunchBebop.run() - Starting position control")
         self.t_old = rospy.Time.now()
@@ -151,7 +180,7 @@ class RealFlight:
     
             # PITCH AND ROLL YAW ADJUSTMENT
             roll_sp_2 = math.cos(self.euler_mv.z) * roll_sp + \
-                      math.sin(self.euler_mv.z) * pitch_sp
+                        math.sin(self.euler_mv.z) * pitch_sp
             pitch_sp = math.cos(self.euler_mv.z) * pitch_sp - \
                        math.sin(self.euler_mv.z) * roll_sp
             roll_sp = roll_sp_2
@@ -164,7 +193,7 @@ class RealFlight:
             rot_v_sp = self.yaw_PID.compute(self.euler_sp.z, self.euler_mv.z, dt)
             
             self.twist_msg.linear.x = pitch_sp / MAX_TILT
-            self.twist_msg.linear.y = roll_sp / MAX_TILT
+            self.twist_msg.linear.y = - roll_sp / MAX_TILT
             self.twist_msg.linear.z = vz_sp / MAX_VZ
             self.twist_msg.angular.z = rot_v_sp / MAX_ROTV
             self.RMS += math.sqrt((self.pose_sp.x - self.x_mv)**2 + (self.pose_sp.y - self.y_mv)**2 \
@@ -175,13 +204,17 @@ class RealFlight:
                 print("x_sp: {}\n x_mv: {}\n y_sp: {}\n y_mv: {}\n z_sp: {}\n z_mv: {}\n".format(self.pose_sp.x, self.x_mv,
                                                                                                  self.pose_sp.y, self.y_mv,
                                                                                                  self.pose_sp.z, self.z_mv))
+                print("Yaw measured: {}\n ".format(self.euler_mv.z))
                 print("Pitch setpoint: {}".format(pitch_sp))
                 print("Roll setpoint: {}".format(roll_sp))
                 print("Yaw setpoint: {}".format(rot_v_sp))
-                print("Twist msg command: {}".format(self.twist_msg))
+                print("lin_vel command: {}".format(self.twist_msg.linear))
+                print("ang_vel command: {}".format(self.twist_msg.angular))
                 print("RMS : {}".format(self.RMS/self.counter))
             
             self.vel_publisher.publish(self.twist_msg)
+            self.pose_pub.publish(self.pose_sp)
+            self.rms_pub.publish(Float64(self.RMS))
             
             
     def angle_cb(self, data):

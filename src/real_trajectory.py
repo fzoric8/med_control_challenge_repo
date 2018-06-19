@@ -18,11 +18,11 @@ class BebopTrajectory:
 
         # True if node received bebop trajectory, otherwise false
         self.trajectory_received = False
-        self.first_measurement = False
+        self.first_measurement = True
         self.controller_info = False
 
         self.trajectory_subscriber = rospy.Subscriber(
-            "/bebop/trajectory_reference",
+            "/multi_dof_trajectory",
             MultiDOFJointTrajectory,
             self.trajectory_cb)
 
@@ -65,6 +65,31 @@ class BebopTrajectory:
         self.trajectory_point_count = len(data.points)
         self.trajectory_points = data.points
 
+    def convert_to_euler(self, qx, qy, qz, qw):
+        """Calculate roll, pitch and yaw angles/rates with quaternions"""
+
+        #conversion quaternion to euler (yaw - pitch - roll)
+        self.euler_mv.x = math.atan2(2 * (qw * qx + qy * qz), qw * qw
+                                     - qx * qx - qy * qy + qz * qz)
+        self.euler_mv.y = math.asin(2 * (qw * qy - qx * qz))
+        self.euler_mv.z = math.atan2(2 * (qw * qz + qx * qy), qw * qw
+                                     + qx * qx - qy * qy - qz * qz)
+
+        # gyro measurements (p,q,r)
+        p = self.p
+        q = self.q
+        r = self.r
+
+        sx = math.sin(self.euler_mv.x)  # sin(roll)
+        cx = math.cos(self.euler_mv.x)  # cos(roll)
+        cy = math.cos(self.euler_mv.y)  # cos(pitch)
+        ty = math.tan(self.euler_mv.y)  # cos(pitch)
+
+        # conversion gyro measurements to roll_rate, pitch_rate, yaw_rate
+        self.euler_rate_mv.x = p + sx * ty * q + cx * ty * r
+        self.euler_rate_mv.y = cx * q - sx * r
+        self.euler_rate_mv.z = sx / cy * q + cx / cy * r
+
     def run(self):
         """
         Run ROS node - computes motor speed for trajectory following using LQR algorithm
@@ -96,7 +121,7 @@ class BebopTrajectory:
 
             # If trajectory isn't received, LQR is used for point following
             if not self.trajectory_received:
-                pose = Vector3(0., 0., 1.0)
+                pose = Vector3(1.13, - 1.05, 1.0)
                 angle = Vector3(0., 0., 0.)
                 vel = Vector3(0., 0., 0.)
 

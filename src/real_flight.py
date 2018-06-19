@@ -60,6 +60,9 @@ class RealFlight:
         self.pid_x = PID(0.5, 0.06, 0.03, MAX_TILT, - MAX_TILT)
         self.pid_y = PID(0.5, 0.06, 0.03, MAX_TILT, - MAX_TILT)
         self.yaw_PID = PID(10, 0, 0.0, MAX_ROTV, - MAX_ROTV)
+
+        self.RMS = 0
+        self.counter = 0
        
     def pose_cb(self, data):
         """PoseStamped msg"""
@@ -164,6 +167,9 @@ class RealFlight:
             self.twist_msg.linear.y = roll_sp / MAX_TILT
             self.twist_msg.linear.z = vz_sp / MAX_VZ
             self.twist_msg.angular.z = rot_v_sp / MAX_ROTV
+            self.RMS += math.sqrt((self.pose_sp.x - self.x_mv)**2 + (self.pose_sp.y - self.y_mv)**2 \
+                                  + (self.pose_sp.z - self.z_mv)**2)
+            self.counter += 1
             if VERBOSE:
 
                 print("x_sp: {}\n x_mv: {}\n y_sp: {}\n y_mv: {}\n z_sp: {}\n z_mv: {}\n".format(self.pose_sp.x, self.x_mv,
@@ -173,6 +179,7 @@ class RealFlight:
                 print("Roll setpoint: {}".format(roll_sp))
                 print("Yaw setpoint: {}".format(rot_v_sp))
                 print("Twist msg command: {}".format(self.twist_msg))
+                print("RMS : {}".format(self.RMS/self.counter))
             
             self.vel_publisher.publish(self.twist_msg)
             

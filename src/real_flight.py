@@ -9,7 +9,7 @@ from nav_msgs.msg import Odometry
 from std_msgs.msg import Float64
 from pid import PID
 from trajectory_msgs.msg import MultiDOFJointTrajectory
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, PoseStamped, TwistStamped
 
 MAX_TILT = 20 * math.pi / 180
 MAX_VZ = 1
@@ -19,11 +19,16 @@ class RealFlight:
 
     def __init__(self):
         
-        self.odom_subscriber = rospy.Subscriber(
+        self.pose_sub = rospy.Subscriber(
             "bebop/optitrack/pose",   
             PoseStamped,
-            self.odometry_callback)
+            self.pose_cb)
         
+        self.vel_sub = rospy.Subscriber(
+            "/bebop/optitrack/velocity", 
+            TwistStamped,
+            self.vel_cb)
+
         self.pose_subscriber = rospy.Subscriber(
             "bebop/pos_ref",
             Vector3,
@@ -76,6 +81,7 @@ class RealFlight:
         self.qz = data.pose.pose.orientation.z
         self.qw = data.pose.pose.orientation.w
         
+    
     def convert_to_euler(self, qx, qy, qz, qw):
         """Calculate roll, pitch and yaw angles/rates with quaternions"""
 

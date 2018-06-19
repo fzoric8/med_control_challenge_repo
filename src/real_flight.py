@@ -15,6 +15,7 @@ MAX_TILT = 20 * math.pi / 180
 MAX_VZ = 1
 MAX_ROTV = 100 * math.pi / 180
 
+
 class RealFlight:
 
     def __init__(self):
@@ -58,30 +59,30 @@ class RealFlight:
         self.pid_y = PID(0.5, 0.06, 0.03, MAX_TILT, - MAX_TILT)
         self.yaw_PID = PID(10, 0, 0.0, MAX_ROTV, - MAX_ROTV)
        
-        
-    def odometry_callback(self, data):
-        """Callback function for odometry subscriber"""
-
+    def pose_cb(self, data):
+        """PoseStamped msg"""
         self.first_measurement = True
 
-        self.x_mv = data.pose.pose.position.x
-        self.y_mv = data.pose.pose.position.y
-        self.z_mv = data.pose.pose.position.z
+        self.x_mv = data.pose.position.x
+        self.y_mv = data.pose.position.y
+        self.z_mv = data.pose.position.z
 
-        self.vx_mv = data.twist.twist.linear.x
-        self.vy_mv = data.twist.twist.linear.y
-        self.vz_mv = data.twist.twist.linear.z
+        self.qx = data.pose.orientation.x
+        self.qy = data.pose.orientation.y
+        self.qz = data.pose.orientation.z
+        self.qw = data.pose.orientation.w
 
-        self.p = data.twist.twist.angular.x
-        self.q = data.twist.twist.angular.y
-        self.r = data.twist.twist.angular.z
+    def vel_cb(self, data):
+        """TwistStamped msg"""
+        self.vx_mv = data.twist.linear.x
+        self.vy_mv = data.twist.linear.y
+        self.vz_mv = data.twist.linear.z
 
-        self.qx = data.pose.pose.orientation.x
-        self.qy = data.pose.pose.orientation.y
-        self.qz = data.pose.pose.orientation.z
-        self.qw = data.pose.pose.orientation.w
-        
-    
+        self.p = data.twist.angular.x
+        self.q = data.twist.angular.y
+        self.r = data.twist.angular.z
+
+
     def convert_to_euler(self, qx, qy, qz, qw):
         """Calculate roll, pitch and yaw angles/rates with quaternions"""
 
@@ -173,6 +174,20 @@ class RealFlight:
         self.pose_sp.x = data.x
         self.pose_sp.y = data.y
         self.pose_sp.z = data.z
+
+
+def prefilter(x_k, x_k_1, a):
+    """
+    First order filter.
+    (1 - a) * xK-1 + a * xK
+
+    :param x_k: Current value
+    :param x_k_1: Previous value
+    :param a: Filter constant
+    :return:
+    """
+    return (1 - a) * x_k_1 + a * x_k
+
 
 if __name__ == "__main__":
     rospy.init_node('bebop_launch', anonymous=True)

@@ -14,6 +14,7 @@ from geometry_msgs.msg import Twist, PoseStamped, TwistStamped
 MAX_TILT = 20 * math.pi / 180
 MAX_VZ = 1
 MAX_ROTV = 100 * math.pi / 180
+VERBOSE = True
 
 
 class RealFlight:
@@ -44,6 +45,7 @@ class RealFlight:
             '/bebop/cmd_vel',
             Twist,
             queue_size=10)
+
         self.twist_msg = Twist()
         
         self.sleep_sec = 2
@@ -162,6 +164,15 @@ class RealFlight:
             self.twist_msg.linear.y = roll_sp / MAX_TILT
             self.twist_msg.linear.z = vz_sp / MAX_VZ
             self.twist_msg.angular.z = rot_v_sp / MAX_ROTV
+            if VERBOSE:
+
+                print("x_sp: {}\n x_mv: {}\n y_sp: {}\n y_mv: {}\n z_sp: {}\n z_mv: {}\n".format(self.pose_sp.x, self.x_mv,
+                                                                                                 self.pose_sp.y, self.y_mv,
+                                                                                                 self.pose_sp.z, self.z_mv))
+                print("Pitch setpoint: {}".format(pitch_sp))
+                print("Roll setpoint: {}".format(roll_sp))
+                print("Yaw setpoint: {}".format(rot_v_sp))
+                print("Twist msg command: {}".format(self.twist_msg))
             
             self.vel_publisher.publish(self.twist_msg)
             
